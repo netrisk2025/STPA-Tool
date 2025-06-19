@@ -277,6 +277,68 @@ class Hazard(BaseEntity):
     @classmethod
     def get_table_name(cls) -> str:
         return "hazards"
+    
+    @property
+    def hazard_name(self) -> str:
+        """Get hazard name (alias for h_name)."""
+        return self.h_name
+    
+    @hazard_name.setter
+    def hazard_name(self, value: str):
+        """Set hazard name (alias for h_name)."""
+        self.h_name = value
+        
+    @property
+    def hazard_description(self) -> str:
+        """Get hazard description (alias for h_description)."""
+        return self.h_description
+    
+    @hazard_description.setter
+    def hazard_description(self, value: str):
+        """Set hazard description (alias for h_description)."""
+        self.h_description = value
+
+
+@dataclass
+class Loss(BaseEntity):
+    """Loss entity representing a system loss."""
+    asset_id: int = 0
+    l_name: str = ""
+    l_description: str = ""
+    loss_description: str = ""
+    
+    # Critical attributes
+    criticality: str = CRITICALITY_NON_CRITICAL
+    confidentiality: bool = False
+    confidentiality_description: str = ""
+    integrity: bool = False
+    integrity_description: str = ""
+    availability: bool = False
+    availability_description: str = ""
+    authenticity: bool = False
+    authenticity_description: str = ""
+    non_repudiation: bool = False
+    non_repudiation_description: str = ""
+    assurance: bool = False
+    assurance_description: str = ""
+    trustworthy: bool = False
+    trustworthy_description: str = ""
+    privacy: bool = False
+    privacy_description: str = ""
+    
+    @classmethod
+    def get_table_name(cls) -> str:
+        return "losses"
+    
+    @property
+    def loss_name(self) -> str:
+        """Get loss name (alias for l_name)."""
+        return self.l_name
+    
+    @loss_name.setter
+    def loss_name(self, value: str):
+        """Set loss name (alias for l_name)."""
+        self.l_name = value
 
 
 class EntityRepository:

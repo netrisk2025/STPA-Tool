@@ -5,7 +5,8 @@ Contains the primary user interface layout and components.
 
 from PySide6.QtWidgets import (
     QMainWindow, QVBoxLayout, QHBoxLayout, QWidget, QSplitter,
-    QMenuBar, QStatusBar, QToolBar, QLabel, QTreeWidget, QTabWidget
+    QMenuBar, QStatusBar, QToolBar, QLabel, QTreeWidget, QTabWidget,
+    QTableWidget, QTableWidgetItem, QPushButton, QHeaderView, QMessageBox
 )
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QAction, QIcon
@@ -15,6 +16,10 @@ from ..config.constants import (
     APP_NAME, WINDOW_MIN_WIDTH, WINDOW_MIN_HEIGHT, SPLITTER_DEFAULT_SIZES
 )
 from ..log_config.config import get_logger
+from .hierarchy_tree import HierarchyTreeWidget
+from .entity_dialogs import SystemEditDialog, FunctionEditDialog, RequirementEditDialog
+from .entity_widgets import InterfaceWidget, AssetWidget, HazardWidget, LossWidget
+from ..database.entities import System, Function, Requirement, Interface, Asset, Hazard, Loss, EntityFactory
 
 logger = get_logger(__name__)
 
@@ -46,6 +51,7 @@ class MainWindow(QMainWindow):
         self.content_tabs = None
         self.status_bar = None
         self.splitter = None
+        self.current_system_id = None
         
         # Setup UI
         self._setup_ui()
@@ -56,7 +62,18 @@ class MainWindow(QMainWindow):
         # Restore window state
         self._restore_window_state()
         
+        # Load hierarchy tree from database if available
+        if self.database_initializer:
+            QTimer.singleShot(100, self._load_initial_data)
+        
         logger.info("Main window initialized")
+    
+    def _load_initial_data(self):
+        """Load initial data from database."""
+        try:
+            self.hierarchy_tree.refresh_from_database()
+        except Exception as e:
+            logger.error(f"Failed to load initial data: {str(e)}")
     
     def _setup_ui(self):
         """Setup the main user interface layout."""
@@ -85,14 +102,13 @@ class MainWindow(QMainWindow):
     
     def _setup_hierarchy_pane(self):
         """Setup the left hierarchy navigation pane."""
-        # Create hierarchy tree widget
-        self.hierarchy_tree = QTreeWidget()
-        self.hierarchy_tree.setHeaderLabel("System Hierarchy")
-        self.hierarchy_tree.setMinimumWidth(200)
+        # Create enhanced hierarchy tree widget
+        self.hierarchy_tree = HierarchyTreeWidget(self.database_initializer)
+        self.hierarchy_tree.setMinimumWidth(250)
         
-        # TODO: Connect to database and populate tree
-        # For now, add placeholder items
-        self._populate_hierarchy_placeholder()
+        # Connect signals
+        self.hierarchy_tree.system_selected.connect(self._on_system_selected)
+        self.hierarchy_tree.system_changed.connect(self._on_system_changed)
         
         # Add to splitter
         self.splitter.addWidget(self.hierarchy_tree)
@@ -104,8 +120,8 @@ class MainWindow(QMainWindow):
         content_layout = QVBoxLayout(content_widget)
         
         # Breadcrumb area (header)
-        breadcrumb_label = QLabel("System A › Subsystem B")
-        breadcrumb_label.setStyleSheet("""
+        self.breadcrumb_label = QLabel("No system selected")
+        self.breadcrumb_label.setStyleSheet("""
             QLabel {
                 background-color: #f0f0f0;
                 padding: 8px;
@@ -113,7 +129,7 @@ class MainWindow(QMainWindow):
                 font-weight: bold;
             }
         """)
-        content_layout.addWidget(breadcrumb_label)
+        content_layout.addWidget(self.breadcrumb_label)
         
         # Tabbed content area
         self.content_tabs = QTabWidget()
@@ -128,30 +144,30 @@ class MainWindow(QMainWindow):
         self.splitter.addWidget(content_widget)
     
     def _setup_placeholder_tabs(self):
-        """Setup placeholder tabs for development."""
+        """Setup tabs for entity management."""
         # Overview tab
-        overview_widget = QWidget()
-        overview_layout = QVBoxLayout(overview_widget)
-        overview_layout.addWidget(QLabel("System Overview - Coming Soon"))
-        self.content_tabs.addTab(overview_widget, "Overview")
+        self._setup_overview_tab()
         
         # Functions tab
-        functions_widget = QWidget()
-        functions_layout = QVBoxLayout(functions_widget)
-        functions_layout.addWidget(QLabel("Functions - Coming Soon"))
-        self.content_tabs.addTab(functions_widget, "Functions")
+        self._setup_functions_tab()
         
         # Interfaces tab
-        interfaces_widget = QWidget()
-        interfaces_layout = QVBoxLayout(interfaces_widget)
-        interfaces_layout.addWidget(QLabel("Interfaces - Coming Soon"))
-        self.content_tabs.addTab(interfaces_widget, "Interfaces")
+        self._setup_interfaces_tab()
         
-        # States tab
-        states_widget = QWidget()
-        states_layout = QVBoxLayout(states_widget)
-        states_layout.addWidget(QLabel("States - Coming Soon"))
-        self.content_tabs.addTab(states_widget, "States")
+        # Requirements tab
+        self._setup_requirements_tab()
+        
+        # Interfaces tab
+        self._setup_interfaces_tab()
+        
+        # Assets tab
+        self._setup_assets_tab()
+        
+        # Hazards tab
+        self._setup_hazards_tab()
+        
+        # Losses tab
+        self._setup_losses_tab()
         
         # Warnings tab
         warnings_widget = QWidget()
@@ -165,29 +181,385 @@ class MainWindow(QMainWindow):
         audit_layout.addWidget(QLabel("Audit - Coming Soon"))
         self.content_tabs.addTab(audit_widget, "Audit")
     
-    def _populate_hierarchy_placeholder(self):
-        """Add placeholder items to hierarchy tree."""
-        # TODO: Replace with actual database data
-        from PySide6.QtWidgets import QTreeWidgetItem
+    def _setup_overview_tab(self):
+        """Setup system overview tab."""
+        overview_widget = QWidget()
+        overview_layout = QVBoxLayout(overview_widget)
         
-        # Root system
-        root_item = QTreeWidgetItem(self.hierarchy_tree)
-        root_item.setText(0, "S-1 Root System")
+        self.system_info_label = QLabel("Select a system to view details")
+        self.system_info_label.setWordWrap(True)
+        overview_layout.addWidget(self.system_info_label)
         
-        # Subsystem 1
-        subsystem1 = QTreeWidgetItem(root_item)
-        subsystem1.setText(0, "S-1.1 Subsystem A")
+        # Edit system button
+        self.edit_system_btn = QPushButton("Edit System")
+        self.edit_system_btn.setEnabled(False)
+        self.edit_system_btn.clicked.connect(self._edit_current_system)
+        overview_layout.addWidget(self.edit_system_btn)
         
-        # Subsystem 2
-        subsystem2 = QTreeWidgetItem(root_item)
-        subsystem2.setText(0, "S-1.2 Subsystem B")
+        overview_layout.addStretch()
+        self.content_tabs.addTab(overview_widget, "Overview")
+    
+    def _setup_functions_tab(self):
+        """Setup functions management tab."""
+        functions_widget = QWidget()
+        functions_layout = QVBoxLayout(functions_widget)
         
-        # Sub-subsystem
-        subsubsystem = QTreeWidgetItem(subsystem2)
-        subsubsystem.setText(0, "S-1.2.1 Component X")
+        # Toolbar
+        functions_toolbar = QHBoxLayout()
         
-        # Expand all items
-        self.hierarchy_tree.expandAll()
+        add_function_btn = QPushButton("Add Function")
+        add_function_btn.clicked.connect(self._add_function)
+        functions_toolbar.addWidget(add_function_btn)
+        
+        functions_toolbar.addStretch()
+        functions_layout.addLayout(functions_toolbar)
+        
+        # Functions table
+        self.functions_table = QTableWidget()
+        self.functions_table.setColumnCount(4)
+        self.functions_table.setHorizontalHeaderLabels(["ID", "Name", "Description", "Criticality"])
+        
+        header = self.functions_table.horizontalHeader()
+        header.setStretchLastSection(True)
+        header.setSectionResizeMode(0, QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(1, QHeaderView.ResizeToContents)
+        
+        self.functions_table.setSelectionBehavior(QTableWidget.SelectRows)
+        self.functions_table.doubleClicked.connect(self._edit_function)
+        
+        functions_layout.addWidget(self.functions_table)
+        
+        self.content_tabs.addTab(functions_widget, "Functions")
+    
+    def _setup_interfaces_tab(self):
+        """Setup interfaces tab (placeholder)."""
+        interfaces_widget = QWidget()
+        interfaces_layout = QVBoxLayout(interfaces_widget)
+        interfaces_layout.addWidget(QLabel("Interfaces - Coming Soon"))
+        self.content_tabs.addTab(interfaces_widget, "Interfaces")
+    
+    def _setup_requirements_tab(self):
+        """Setup requirements management tab."""
+        requirements_widget = QWidget()
+        requirements_layout = QVBoxLayout(requirements_widget)
+        
+        # Toolbar
+        requirements_toolbar = QHBoxLayout()
+        
+        add_requirement_btn = QPushButton("Add Requirement")
+        add_requirement_btn.clicked.connect(self._add_requirement)
+        requirements_toolbar.addWidget(add_requirement_btn)
+        
+        requirements_toolbar.addStretch()
+        requirements_layout.addLayout(requirements_toolbar)
+        
+        # Requirements table
+        self.requirements_table = QTableWidget()
+        self.requirements_table.setColumnCount(5)
+        self.requirements_table.setHorizontalHeaderLabels(["ID", "Alphanumeric ID", "Text", "Verification", "Criticality"])
+        
+        header = self.requirements_table.horizontalHeader()
+        header.setStretchLastSection(True)
+        header.setSectionResizeMode(0, QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(1, QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(3, QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(4, QHeaderView.ResizeToContents)
+        
+        self.requirements_table.setSelectionBehavior(QTableWidget.SelectRows)
+        self.requirements_table.doubleClicked.connect(self._edit_requirement)
+        
+        requirements_layout.addWidget(self.requirements_table)
+        
+        self.content_tabs.addTab(requirements_widget, "Requirements")
+    
+    def _on_system_selected(self, system_id: int):
+        """Handle system selection from hierarchy tree."""
+        try:
+            self.current_system_id = system_id
+            
+            # Get system from database
+            db_manager = self.database_initializer.get_database_manager()
+            connection = db_manager.get_connection()
+            
+            system_data = connection.fetchone(
+                "SELECT * FROM systems WHERE id = ?",
+                (system_id,)
+            )
+            
+            if system_data:
+                system_dict = dict(system_data)
+                system = System(**system_dict)
+                
+                # Update breadcrumb
+                self.breadcrumb_label.setText(f"{system.get_hierarchical_id()} - {system.system_name}")
+                
+                # Update overview tab
+                self.system_info_label.setText(f"""
+                <h3>{system.system_name}</h3>
+                <p><strong>ID:</strong> {system.get_hierarchical_id()}</p>
+                <p><strong>Description:</strong> {system.system_description or 'No description'}</p>
+                <p><strong>Baseline:</strong> {system.baseline}</p>
+                <p><strong>Created:</strong> {system.created_date}</p>
+                """)
+                
+                # Enable edit button
+                self.edit_system_btn.setEnabled(True)
+                
+                # Load related entities
+                self._load_functions_for_system(system_id)
+                self._load_requirements_for_system(system_id)
+                
+                logger.info(f"System selected: {system.system_name}")
+            
+        except Exception as e:
+            logger.error(f"Failed to load system details: {str(e)}")
+            self.breadcrumb_label.setText("Error loading system")
+    
+    def _on_system_changed(self, system_id: int):
+        """Handle system changes from hierarchy tree."""
+        if system_id == self.current_system_id:
+            # Refresh current system view
+            self._on_system_selected(system_id)
+    
+    def _load_functions_for_system(self, system_id: int):
+        """Load functions for the selected system."""
+        try:
+            db_manager = self.database_initializer.get_database_manager()
+            connection = db_manager.get_connection()
+            
+            functions = connection.fetchall(
+                "SELECT * FROM functions WHERE system_id = ? AND baseline = ? ORDER BY system_hierarchy",
+                (system_id, "Working")
+            )
+            
+            # Clear and populate functions table
+            self.functions_table.setRowCount(len(functions))
+            
+            for row, func_data in enumerate(functions):
+                func_dict = dict(func_data)
+                function = Function(**func_dict)
+                
+                self.functions_table.setItem(row, 0, QTableWidgetItem(function.get_hierarchical_id()))
+                self.functions_table.setItem(row, 1, QTableWidgetItem(function.function_name))
+                self.functions_table.setItem(row, 2, QTableWidgetItem(function.function_description or ""))
+                self.functions_table.setItem(row, 3, QTableWidgetItem(function.criticality or "Medium"))
+                
+                # Store function ID for editing
+                self.functions_table.item(row, 0).setData(Qt.UserRole, function.id)
+            
+        except Exception as e:
+            logger.error(f"Failed to load functions: {str(e)}")
+    
+    def _load_requirements_for_system(self, system_id: int):
+        """Load requirements for the selected system."""
+        try:
+            db_manager = self.database_initializer.get_database_manager()
+            connection = db_manager.get_connection()
+            
+            requirements = connection.fetchall(
+                "SELECT * FROM requirements WHERE system_id = ? AND baseline = ? ORDER BY system_hierarchy",
+                (system_id, "Working")
+            )
+            
+            # Clear and populate requirements table
+            self.requirements_table.setRowCount(len(requirements))
+            
+            for row, req_data in enumerate(requirements):
+                req_dict = dict(req_data)
+                requirement = Requirement(**req_dict)
+                
+                self.requirements_table.setItem(row, 0, QTableWidgetItem(requirement.get_hierarchical_id()))
+                self.requirements_table.setItem(row, 1, QTableWidgetItem(requirement.alphanumeric_identifier or ""))
+                self.requirements_table.setItem(row, 2, QTableWidgetItem(requirement.requirement_text[:100] + "..." if len(requirement.requirement_text) > 100 else requirement.requirement_text))
+                self.requirements_table.setItem(row, 3, QTableWidgetItem(requirement.verification_method or ""))
+                self.requirements_table.setItem(row, 4, QTableWidgetItem(requirement.criticality or "Medium"))
+                
+                # Store requirement ID for editing
+                self.requirements_table.item(row, 0).setData(Qt.UserRole, requirement.id)
+            
+        except Exception as e:
+            logger.error(f"Failed to load requirements: {str(e)}")
+    
+    def _edit_current_system(self):
+        """Edit the currently selected system."""
+        if not self.current_system_id:
+            return
+        
+        try:
+            # Get system from database
+            db_manager = self.database_initializer.get_database_manager()
+            connection = db_manager.get_connection()
+            
+            system_data = connection.fetchone(
+                "SELECT * FROM systems WHERE id = ?",
+                (self.current_system_id,)
+            )
+            
+            if system_data:
+                system_dict = dict(system_data)
+                system = System(**system_dict)
+                
+                # Open edit dialog
+                dialog = SystemEditDialog(system, parent=self)
+                dialog.system_saved.connect(self._on_system_saved)
+                dialog.exec()
+        
+        except Exception as e:
+            logger.error(f"Failed to edit system: {str(e)}")
+    
+    def _add_function(self):
+        """Add a new function to the current system."""
+        if not self.current_system_id:
+            QMessageBox.warning(self, "No System Selected", "Please select a system first.")
+            return
+        
+        dialog = FunctionEditDialog(system_id=self.current_system_id, parent=self)
+        dialog.function_saved.connect(self._on_function_saved)
+        dialog.exec()
+    
+    def _edit_function(self):
+        """Edit selected function."""
+        current_row = self.functions_table.currentRow()
+        if current_row < 0:
+            return
+        
+        function_id = self.functions_table.item(current_row, 0).data(Qt.UserRole)
+        if not function_id:
+            return
+        
+        try:
+            # Get function from database
+            db_manager = self.database_initializer.get_database_manager()
+            connection = db_manager.get_connection()
+            
+            function_data = connection.fetchone(
+                "SELECT * FROM functions WHERE id = ?",
+                (function_id,)
+            )
+            
+            if function_data:
+                func_dict = dict(function_data)
+                function = Function(**func_dict)
+                
+                dialog = FunctionEditDialog(function, parent=self)
+                dialog.function_saved.connect(self._on_function_saved)
+                dialog.exec()
+        
+        except Exception as e:
+            logger.error(f"Failed to edit function: {str(e)}")
+    
+    def _add_requirement(self):
+        """Add a new requirement to the current system."""
+        if not self.current_system_id:
+            QMessageBox.warning(self, "No System Selected", "Please select a system first.")
+            return
+        
+        dialog = RequirementEditDialog(system_id=self.current_system_id, parent=self)
+        dialog.requirement_saved.connect(self._on_requirement_saved)
+        dialog.exec()
+    
+    def _edit_requirement(self):
+        """Edit selected requirement."""
+        current_row = self.requirements_table.currentRow()
+        if current_row < 0:
+            return
+        
+        requirement_id = self.requirements_table.item(current_row, 0).data(Qt.UserRole)
+        if not requirement_id:
+            return
+        
+        try:
+            # Get requirement from database
+            db_manager = self.database_initializer.get_database_manager()
+            connection = db_manager.get_connection()
+            
+            requirement_data = connection.fetchone(
+                "SELECT * FROM requirements WHERE id = ?",
+                (requirement_id,)
+            )
+            
+            if requirement_data:
+                req_dict = dict(requirement_data)
+                requirement = Requirement(**req_dict)
+                
+                dialog = RequirementEditDialog(requirement, parent=self)
+                dialog.requirement_saved.connect(self._on_requirement_saved)
+                dialog.exec()
+        
+        except Exception as e:
+            logger.error(f"Failed to edit requirement: {str(e)}")
+    
+    def _on_system_saved(self, system: System):
+        """Handle system save event."""
+        try:
+            db_manager = self.database_initializer.get_database_manager()
+            connection = db_manager.get_connection()
+            system_repo = EntityFactory.get_repository(connection, System)
+            
+            if system.id is None:
+                # New system
+                saved_system = system_repo.create(system)
+                if saved_system:
+                    self.hierarchy_tree.add_system(saved_system)
+                    self.hierarchy_tree.select_system(saved_system.id)
+                    logger.info(f"Created new system: {saved_system.system_name}")
+            else:
+                # Update existing system
+                if system_repo.update(system):
+                    self.hierarchy_tree.update_system(system)
+                    if system.id == self.current_system_id:
+                        self._on_system_selected(system.id)
+                    logger.info(f"Updated system: {system.system_name}")
+        
+        except Exception as e:
+            logger.error(f"Failed to save system: {str(e)}")
+            QMessageBox.critical(self, "Save Failed", f"Failed to save system: {str(e)}")
+    
+    def _on_function_saved(self, function: Function):
+        """Handle function save event."""
+        try:
+            db_manager = self.database_initializer.get_database_manager()
+            connection = db_manager.get_connection()
+            function_repo = EntityFactory.get_repository(connection, Function)
+            
+            if function.id is None:
+                # New function
+                saved_function = function_repo.create(function)
+                if saved_function:
+                    self._load_functions_for_system(self.current_system_id)
+                    logger.info(f"Created new function: {saved_function.function_name}")
+            else:
+                # Update existing function
+                if function_repo.update(function):
+                    self._load_functions_for_system(self.current_system_id)
+                    logger.info(f"Updated function: {function.function_name}")
+        
+        except Exception as e:
+            logger.error(f"Failed to save function: {str(e)}")
+            QMessageBox.critical(self, "Save Failed", f"Failed to save function: {str(e)}")
+    
+    def _on_requirement_saved(self, requirement: Requirement):
+        """Handle requirement save event."""
+        try:
+            db_manager = self.database_initializer.get_database_manager()
+            connection = db_manager.get_connection()
+            requirement_repo = EntityFactory.get_repository(connection, Requirement)
+            
+            if requirement.id is None:
+                # New requirement
+                saved_requirement = requirement_repo.create(requirement)
+                if saved_requirement:
+                    self._load_requirements_for_system(self.current_system_id)
+                    logger.info(f"Created new requirement: {saved_requirement.alphanumeric_identifier}")
+            else:
+                # Update existing requirement
+                if requirement_repo.update(requirement):
+                    self._load_requirements_for_system(self.current_system_id)
+                    logger.info(f"Updated requirement: {requirement.alphanumeric_identifier}")
+        
+        except Exception as e:
+            logger.error(f"Failed to save requirement: {str(e)}")
+            QMessageBox.critical(self, "Save Failed", f"Failed to save requirement: {str(e)}")
     
     def _setup_menus(self):
         """Setup the application menu bar."""
@@ -372,3 +744,55 @@ class MainWindow(QMainWindow):
             <p>A Systems-Theoretic Process Analysis Tool</p>
             """
         )
+    
+    def _setup_interfaces_tab(self):
+        """Setup interfaces management tab."""
+        try:
+            self.interfaces_widget = InterfaceWidget(self.database_initializer)
+            self.content_tabs.addTab(self.interfaces_widget, "Interfaces")
+        except Exception as e:
+            logger.error(f"Failed to setup interfaces tab: {str(e)}")
+            # Add fallback placeholder
+            interfaces_widget = QWidget()
+            interfaces_layout = QVBoxLayout(interfaces_widget)
+            interfaces_layout.addWidget(QLabel("Interfaces - Setup Error"))
+            self.content_tabs.addTab(interfaces_widget, "Interfaces")
+    
+    def _setup_assets_tab(self):
+        """Setup assets management tab."""
+        try:
+            self.assets_widget = AssetWidget(self.database_initializer)
+            self.content_tabs.addTab(self.assets_widget, "Assets")
+        except Exception as e:
+            logger.error(f"Failed to setup assets tab: {str(e)}")
+            # Add fallback placeholder
+            assets_widget = QWidget()
+            assets_layout = QVBoxLayout(assets_widget)
+            assets_layout.addWidget(QLabel("Assets - Setup Error"))
+            self.content_tabs.addTab(assets_widget, "Assets")
+    
+    def _setup_hazards_tab(self):
+        """Setup hazards management tab."""
+        try:
+            self.hazards_widget = HazardWidget(self.database_initializer)
+            self.content_tabs.addTab(self.hazards_widget, "Hazards")
+        except Exception as e:
+            logger.error(f"Failed to setup hazards tab: {str(e)}")
+            # Add fallback placeholder
+            hazards_widget = QWidget()
+            hazards_layout = QVBoxLayout(hazards_widget)
+            hazards_layout.addWidget(QLabel("Hazards - Setup Error"))
+            self.content_tabs.addTab(hazards_widget, "Hazards")
+    
+    def _setup_losses_tab(self):
+        """Setup losses management tab."""
+        try:
+            self.losses_widget = LossWidget(self.database_initializer)
+            self.content_tabs.addTab(self.losses_widget, "Losses")
+        except Exception as e:
+            logger.error(f"Failed to setup losses tab: {str(e)}")
+            # Add fallback placeholder
+            losses_widget = QWidget()
+            losses_layout = QVBoxLayout(losses_widget)
+            losses_layout.addWidget(QLabel("Losses - Setup Error"))
+            self.content_tabs.addTab(losses_widget, "Losses")

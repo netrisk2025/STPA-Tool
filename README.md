@@ -15,9 +15,9 @@ The STPA Tool provides a structured environment for users to:
 
 ## Development Status
 
-**Current Phase:** 2 - Database Design and Implementation ✅ **COMPLETED**
+**Current Phase:** 4 - Core Entity Management ✅ **IN PROGRESS**
 
-**Next Phase:** 3 - Core User Interface Framework
+**Next Phase:** 5 - STPA Analysis Framework
 
 ### Completed Features
 
@@ -42,6 +42,26 @@ The STPA Tool provides a structured environment for users to:
 - Database initialization and migration
 - Comprehensive test suite (16 tests)
 - Application integration with database
+
+✅ **Phase 3: Core User Interface Framework**
+- Enhanced hierarchy tree widget with database integration
+- Interactive system navigation and selection
+- Entity editing dialogs for System, Function, and Requirement entities
+- Critical attributes widget for security/safety properties
+- Real-time data loading and display
+- Context menus for entity management
+- Entity management tabs with CRUD operations
+- Breadcrumb navigation for selected systems
+- Full database integration with UI components
+
+🔄 **Phase 4: Core Entity Management** *(In Progress)*
+- Base entity widget framework with CRUD operations
+- Entity validation and change tracking system
+- Interface entity management with system associations
+- Asset entity management with critical attributes
+- Hazard entity management for safety analysis
+- Loss entity management for loss scenarios
+- Extensible framework for additional entity types
 
 ## Quick Start
 
@@ -120,11 +140,11 @@ Core dependencies are managed in `requirements.txt`:
 
 ### Current Status
 
-Both foundational phases are complete with a fully functional database backend. The next development phase will focus on:
+All three foundational phases are complete with a fully functional application including database backend and interactive UI. The next development phase will focus on:
 
-1. **Enhanced User Interface** - Entity editing forms and validation
-2. **System Management** - Interactive system hierarchy with database integration
-3. **Entity Management** - Full CRUD operations through the UI
+1. **Core Entity Management** - Interface, Asset, and Control Structure entities
+2. **STPA Analysis Framework** - Loss scenarios, hazard analysis, and control actions
+3. **Report Generation** - Export capabilities and documentation
 4. **Data Visualization** - Mermaid.js integration for diagrams
 
 ### Architecture
