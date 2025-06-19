@@ -18,6 +18,7 @@ from .log_config.config import LoggingConfig, get_logger
 from .ui.dialogs import DirectorySelectionDialog, ErrorDialog
 from .ui.main_window import MainWindow
 from .utils.directory import DirectoryManager
+from .database.init import DatabaseInitializer
 
 logger = get_logger(__name__)
 
@@ -45,6 +46,7 @@ class STPAApplication(QApplication):
         self.config_manager: Optional[ConfigManager] = None
         self.main_window: Optional[MainWindow] = None
         self.splash_screen: Optional[QSplashScreen] = None
+        self.database_initializer: Optional[DatabaseInitializer] = None
         
         # Setup exception handling
         sys.excepthook = self._handle_exception
@@ -77,9 +79,15 @@ class STPAApplication(QApplication):
             self.config_manager = ConfigManager(working_directory)
             self.config_manager.load_config()
             
+            # Initialize database
+            self._update_splash("Initializing database...")
+            self.database_initializer = DatabaseInitializer(working_directory)
+            if not self.database_initializer.initialize():
+                raise Exception("Failed to initialize database")
+            
             # Create main window
             self._update_splash("Creating main window...")
-            self.main_window = MainWindow(self.config_manager)
+            self.main_window = MainWindow(self.config_manager, self.database_initializer)
             
             # Hide splash screen and show main window
             self._hide_splash_screen()
@@ -118,6 +126,10 @@ class STPAApplication(QApplication):
                 
                 # Save configuration to file
                 self.config_manager.save_config()
+            
+            # Close database
+            if self.database_initializer:
+                self.database_initializer.close()
             
             # Close main window
             if self.main_window:

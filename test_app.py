@@ -152,6 +152,63 @@ def test_logging():
         print(f"✗ Logging test failed: {e}")
         return False
 
+def test_database():
+    """Test database system."""
+    print("\nTesting database system...")
+    
+    try:
+        from src.database.init import DatabaseInitializer
+        from src.database.entities import System, EntityFactory
+        
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            
+            # Initialize database
+            db_init = DatabaseInitializer(temp_path)
+            success = db_init.initialize()
+            print(f"✓ Database initialization: {success}")
+            
+            if not success:
+                return False
+            
+            # Test database health
+            db_manager = db_init.get_database_manager()
+            health = db_manager.is_healthy()
+            print(f"✓ Database health check: {health}")
+            
+            # Test entity operations
+            connection = db_manager.get_connection()
+            system_repo = EntityFactory.get_repository(connection, System)
+            
+            # Create test system
+            test_system = System(
+                type_identifier="S",
+                level_identifier=0,
+                sequential_identifier=999,
+                system_hierarchy="S-999",
+                system_name="Test System",
+                system_description="Database test system"
+            )
+            
+            system_id = system_repo.create(test_system)
+            print(f"✓ System creation: ID {system_id}")
+            
+            # Read system back
+            retrieved_system = system_repo.read(system_id)
+            print(f"✓ System retrieval: {retrieved_system.system_name}")
+            
+            # Get database info
+            info = db_init.get_database_info()
+            systems_count = info.get('tables', {}).get('systems', 0)
+            print(f"✓ Database contains {systems_count} systems")
+            
+            db_init.close()
+            
+            return True
+    except Exception as e:
+        print(f"✗ Database test failed: {e}")
+        return False
+
 def main():
     """Run all tests."""
     print("=" * 50)
@@ -164,6 +221,7 @@ def main():
         ("Directory Management", test_directory_management),
         ("GUI Framework", test_gui_framework),
         ("Logging System", test_logging),
+        ("Database System", test_database),
     ]
     
     passed = 0

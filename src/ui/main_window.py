@@ -24,16 +24,18 @@ class MainWindow(QMainWindow):
     Main application window for STPA Tool.
     """
     
-    def __init__(self, config_manager: ConfigManager):
+    def __init__(self, config_manager: ConfigManager, database_initializer=None):
         """
         Initialize the main window.
         
         Args:
             config_manager: Configuration manager instance
+            database_initializer: Database initializer instance (optional)
         """
         super().__init__()
         
         self.config_manager = config_manager
+        self.database_initializer = database_initializer
         
         # Window setup
         self.setWindowTitle(APP_NAME)
@@ -265,12 +267,25 @@ class MainWindow(QMainWindow):
         self.setStatusBar(self.status_bar)
         
         # Database status
-        db_label = QLabel("Database: Connected")
-        self.status_bar.addPermanentWidget(db_label)
+        if self.database_initializer:
+            db_manager = self.database_initializer.get_database_manager()
+            if db_manager.is_healthy():
+                db_status = "Database: Connected"
+                db_info = self.database_initializer.get_database_info()
+                if 'tables' in db_info and 'systems' in db_info['tables']:
+                    systems_count = db_info['tables']['systems']
+                    db_status += f" ({systems_count} systems)"
+            else:
+                db_status = "Database: Error"
+        else:
+            db_status = "Database: Not initialized"
+            
+        self.db_label = QLabel(db_status)
+        self.status_bar.addPermanentWidget(self.db_label)
         
         # Baseline status
-        baseline_label = QLabel("Baseline: Working")
-        self.status_bar.addPermanentWidget(baseline_label)
+        self.baseline_label = QLabel("Baseline: Working")
+        self.status_bar.addPermanentWidget(self.baseline_label)
         
         # Default status message
         self.status_bar.showMessage("Ready")
