@@ -4,10 +4,16 @@ Provides centralized logging setup and management.
 """
 
 import logging
-import logging.handlers
 import os
 from pathlib import Path
 from typing import Optional
+
+# Import handlers separately to avoid import issues
+try:
+    from logging.handlers import RotatingFileHandler
+except ImportError:
+    # Fallback for environments where handlers might not be available
+    RotatingFileHandler = None
 
 
 class LoggingConfig:
@@ -54,15 +60,24 @@ class LoggingConfig:
         root_logger.addHandler(console_handler)
         
         # File handler (if log file specified)
-        if log_file:
+        if log_file and RotatingFileHandler:
             log_path = Path(log_file)
             log_path.parent.mkdir(parents=True, exist_ok=True)
             
-            file_handler = logging.handlers.RotatingFileHandler(
+            file_handler = RotatingFileHandler(
                 log_file,
                 maxBytes=max_bytes,
                 backupCount=backup_count
             )
+            file_handler.setFormatter(formatter)
+            file_handler.setLevel(log_level)
+            root_logger.addHandler(file_handler)
+        elif log_file:
+            # Fallback to basic FileHandler if RotatingFileHandler not available
+            log_path = Path(log_file)
+            log_path.parent.mkdir(parents=True, exist_ok=True)
+            
+            file_handler = logging.FileHandler(log_file)
             file_handler.setFormatter(formatter)
             file_handler.setLevel(log_level)
             root_logger.addHandler(file_handler)

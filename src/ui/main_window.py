@@ -14,7 +14,7 @@ from ..config.settings import ConfigManager
 from ..config.constants import (
     APP_NAME, WINDOW_MIN_WIDTH, WINDOW_MIN_HEIGHT, SPLITTER_DEFAULT_SIZES
 )
-from ..logging.config import get_logger
+from ..log_config.config import get_logger
 
 logger = get_logger(__name__)
 

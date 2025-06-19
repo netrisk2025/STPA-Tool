@@ -12,7 +12,7 @@ from ..config.constants import (
     DEFAULT_DB_NAME, DIAGRAMS_DIR, BASELINES_DIR, TEMP_DIR,
     CONFIG_FILE_JSON, DEFAULT_DIR_PERMISSIONS
 )
-from ..logging.config import get_logger
+from ..log_config.config import get_logger
 
 logger = get_logger(__name__)
 

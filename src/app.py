@@ -14,7 +14,7 @@ from PySide6.QtGui import QPixmap, QIcon
 
 from .config.settings import ConfigManager
 from .config.constants import APP_NAME, APP_VERSION, APP_AUTHOR
-from .logging.config import LoggingConfig, get_logger
+from .log_config.config import LoggingConfig, get_logger
 from .ui.dialogs import DirectorySelectionDialog, ErrorDialog
 from .ui.main_window import MainWindow
 from .utils.directory import DirectoryManager

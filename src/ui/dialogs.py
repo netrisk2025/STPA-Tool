@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Optional, Callable
 
 from ..utils.directory import DirectoryManager
-from ..logging.config import get_logger
+from ..log_config.config import get_logger
 
 logger = get_logger(__name__)
 

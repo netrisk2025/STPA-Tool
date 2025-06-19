@@ -1,4 +1,4 @@
 """
-Logging configuration for STPA Tool
+Log configuration for STPA Tool
 Centralized logging setup and management.
 """
