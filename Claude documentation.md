@@ -118,7 +118,7 @@ This document tracks the development progress of the STPA Tool (Systems-Theoreti
   - Real-time loading and display of entity data
   - Context-sensitive editing and validation
 
-### Phase 4: Core Entity Management 🔄 **IN PROGRESS**
+### Phase 4: Core Entity Management ✅ **COMPLETED**
 
 #### 4.1 Base Entity Framework ✅
 - **4.1.1** ✅ Created base entity widget class with common CRUD operations
@@ -130,15 +130,26 @@ This document tracks the development progress of the STPA Tool (Systems-Theoreti
 - **4.5.2** ✅ Created Interface entity widget with system associations
 - **4.5.3** ✅ Created Asset entity widget with critical attributes
 
+#### 4.6 Requirement Management ✅
+- **4.6.1** ✅ Complete requirement hierarchy management already implemented
+- Requirements editing dialogs with parent-child relationships
+- Verification method tracking and validation
+
+#### 4.7 Control Structure Entity Management ✅
+- **4.7.1** ✅ Created ControlStructure entity widget with diagram URL support
+- **4.7.2** ✅ Implemented Controller entity widget for control system controllers
+- **4.7.3** ✅ Created entity classes for ControlledProcess, ControlAction, and Feedback
+
 #### 4.8 Hazard and Loss Management ✅
-- **4.8.1** ✅ Created Hazard entity widget for safety analysis
+- **4.8.1** ✅ Created Hazard entity widget for safety analysis with system/asset associations
 - **4.8.2** ✅ Implemented Loss entity management system
 
 #### 4.9 Entity Framework Integration ✅
-- Added Loss entity class to database entities
-- Integrated new entity widgets into main application
-- Added entity management tabs: Interfaces, Assets, Hazards, Losses
-- Implemented error handling and fallback placeholders
+- ✅ Added all control structure entity classes to database entities
+- ✅ Integrated new entity widgets into main application
+- ✅ Added entity management tabs: Interfaces, Assets, Hazards, Losses, Control Structures, Controllers
+- ✅ Implemented error handling and fallback placeholders
+- ✅ Fixed entity field mappings and table configurations
 
 ## Current Application Structure
 
@@ -255,24 +266,26 @@ shiboken6==6.9.1
 
 ## Next Steps
 
-All three foundational phases are now complete with a fully functional STPA Tool including database backend and interactive UI. The next major phase will focus on:
+Phase 4 is now complete with a comprehensive entity management system for all STPA entities. The next major phases will focus on:
 
-1. **Core Entity Management (Phase 4)**
-   - Interface, Asset, and Control Structure entities
-   - Loss scenarios and hazard analysis
-   - Control actions and feedback mechanisms
-   - Enhanced validation and data integrity
+1. **Diagramming and Visualization (Phase 5)**
+   - Mermaid.js integration for diagram generation
+   - Control structure diagram visualization
+   - State diagram generation and rendering
+   - Requirement hierarchy visualization
+   - Interactive diagram viewer with zoom/pan
 
-2. **STPA Analysis Framework (Phase 5)**
-   - Loss scenario analysis workflow
-   - Hazard identification and tracking
-   - Control structure modeling
-   - Safety constraint derivation
+2. **Import/Export and Collaboration (Phase 6)**
+   - JSON/Markdown export functionality
+   - Working directory export/import
+   - Branch and merge utilities for collaboration
+   - Baseline management system
 
-3. **Testing Framework (Phase 7)**
-   - Unit tests for all components
-   - Integration testing
-   - UI testing with pytest-qt
+3. **Testing and Validation (Phase 7)**
+   - Comprehensive testing framework
+   - Data validation engine
+   - Warnings and validation tab implementation
+   - Performance testing for large datasets
 
 ## Testing Results ✅
 

@@ -15,9 +15,9 @@ The STPA Tool provides a structured environment for users to:
 
 ## Development Status
 
-**Current Phase:** 4 - Core Entity Management ✅ **IN PROGRESS**
+**Current Phase:** 4 - Core Entity Management ✅ **COMPLETED**
 
-**Next Phase:** 5 - STPA Analysis Framework
+**Next Phase:** 5 - Diagramming and Visualization
 
 ### Completed Features
 
@@ -54,14 +54,16 @@ The STPA Tool provides a structured environment for users to:
 - Breadcrumb navigation for selected systems
 - Full database integration with UI components
 
-🔄 **Phase 4: Core Entity Management** *(In Progress)*
+✅ **Phase 4: Core Entity Management** *(Completed)*
 - Base entity widget framework with CRUD operations
 - Entity validation and change tracking system
 - Interface entity management with system associations
 - Asset entity management with critical attributes
 - Hazard entity management for safety analysis
 - Loss entity management for loss scenarios
-- Extensible framework for additional entity types
+- Control structure entity management (ControlStructure, Controller)
+- Complete entity framework with all STPA entities implemented
+- Entity tabs integrated into main application interface
 
 ## Quick Start
 

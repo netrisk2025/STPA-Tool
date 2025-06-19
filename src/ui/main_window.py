@@ -18,8 +18,14 @@ from ..config.constants import (
 from ..log_config.config import get_logger
 from .hierarchy_tree import HierarchyTreeWidget
 from .entity_dialogs import SystemEditDialog, FunctionEditDialog, RequirementEditDialog
-from .entity_widgets import InterfaceWidget, AssetWidget, HazardWidget, LossWidget
-from ..database.entities import System, Function, Requirement, Interface, Asset, Hazard, Loss, EntityFactory
+from .entity_widgets import (
+    InterfaceWidget, AssetWidget, HazardWidget, LossWidget,
+    ControlStructureWidget, ControllerWidget
+)
+from ..database.entities import (
+    System, Function, Requirement, Interface, Asset, Hazard, Loss, 
+    ControlStructure, Controller, EntityFactory
+)
 
 logger = get_logger(__name__)
 
@@ -151,9 +157,6 @@ class MainWindow(QMainWindow):
         # Functions tab
         self._setup_functions_tab()
         
-        # Interfaces tab
-        self._setup_interfaces_tab()
-        
         # Requirements tab
         self._setup_requirements_tab()
         
@@ -168,6 +171,12 @@ class MainWindow(QMainWindow):
         
         # Losses tab
         self._setup_losses_tab()
+        
+        # Control Structure tab
+        self._setup_control_structures_tab()
+        
+        # Controllers tab
+        self._setup_controllers_tab()
         
         # Warnings tab
         warnings_widget = QWidget()
@@ -796,3 +805,29 @@ class MainWindow(QMainWindow):
             losses_layout = QVBoxLayout(losses_widget)
             losses_layout.addWidget(QLabel("Losses - Setup Error"))
             self.content_tabs.addTab(losses_widget, "Losses")
+    
+    def _setup_control_structures_tab(self):
+        """Setup control structures management tab."""
+        try:
+            self.control_structures_widget = ControlStructureWidget(self.database_initializer)
+            self.content_tabs.addTab(self.control_structures_widget, "Control Structures")
+        except Exception as e:
+            logger.error(f"Failed to setup control structures tab: {str(e)}")
+            # Add fallback placeholder
+            control_structures_widget = QWidget()
+            control_structures_layout = QVBoxLayout(control_structures_widget)
+            control_structures_layout.addWidget(QLabel("Control Structures - Setup Error"))
+            self.content_tabs.addTab(control_structures_widget, "Control Structures")
+    
+    def _setup_controllers_tab(self):
+        """Setup controllers management tab."""
+        try:
+            self.controllers_widget = ControllerWidget(self.database_initializer)
+            self.content_tabs.addTab(self.controllers_widget, "Controllers")
+        except Exception as e:
+            logger.error(f"Failed to setup controllers tab: {str(e)}")
+            # Add fallback placeholder
+            controllers_widget = QWidget()
+            controllers_layout = QVBoxLayout(controllers_widget)
+            controllers_layout.addWidget(QLabel("Controllers - Setup Error"))
+            self.content_tabs.addTab(controllers_widget, "Controllers")
