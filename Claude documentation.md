@@ -118,7 +118,7 @@ This document tracks the development progress of the STPA Tool (Systems-Theoreti
   - Real-time loading and display of entity data
   - Context-sensitive editing and validation
 
-### Phase 4: Core Entity Management 🔄 **IN PROGRESS**
+### Phase 4: Core Entity Management ✅ **COMPLETED**
 
 #### 4.1 Base Entity Framework ✅
 - **4.1.1** ✅ Created base entity widget class with common CRUD operations
@@ -130,15 +130,77 @@ This document tracks the development progress of the STPA Tool (Systems-Theoreti
 - **4.5.2** ✅ Created Interface entity widget with system associations
 - **4.5.3** ✅ Created Asset entity widget with critical attributes
 
+#### 4.6 Requirement Management ✅
+- **4.6.1** ✅ Complete requirement hierarchy management already implemented
+- Requirements editing dialogs with parent-child relationships
+- Verification method tracking and validation
+
+#### 4.7 Control Structure Entity Management ✅
+- **4.7.1** ✅ Created ControlStructure entity widget with diagram URL support
+- **4.7.2** ✅ Implemented Controller entity widget for control system controllers
+- **4.7.3** ✅ Created entity classes for ControlledProcess, ControlAction, and Feedback
+
 #### 4.8 Hazard and Loss Management ✅
-- **4.8.1** ✅ Created Hazard entity widget for safety analysis
+- **4.8.1** ✅ Created Hazard entity widget for safety analysis with system/asset associations
 - **4.8.2** ✅ Implemented Loss entity management system
 
 #### 4.9 Entity Framework Integration ✅
-- Added Loss entity class to database entities
-- Integrated new entity widgets into main application
-- Added entity management tabs: Interfaces, Assets, Hazards, Losses
-- Implemented error handling and fallback placeholders
+- ✅ Added all control structure entity classes to database entities
+- ✅ Integrated new entity widgets into main application
+- ✅ Added entity management tabs: Interfaces, Assets, Hazards, Losses, Control Structures, Controllers
+- ✅ Implemented error handling and fallback placeholders
+- ✅ Fixed entity field mappings and table configurations
+
+### Phase 5: Diagramming and Visualization ✅ **COMPLETED**
+
+#### 5.1 Mermaid.js Integration ✅
+- **5.1.1** ✅ Installed and configured Mermaid CLI (v11.6.0)
+- **5.1.2** ✅ Created Mermaid process execution wrapper in DiagramRenderer
+- **5.1.3** ✅ Implemented diagram generation pipeline with error handling
+- **5.1.4** ✅ Added diagram format validation and syntax checking
+- **5.1.5** ✅ Created diagram file management system with baseline support
+
+#### 5.2 Control Structure Diagrams ✅
+- **5.2.1** ✅ Created control structure Mermaid generator
+- **5.2.2** ✅ Implemented controller-process relationship visualization
+- **5.2.3** ✅ Added control action and feedback display capabilities
+- **5.2.4** ✅ Created automatic layout algorithms for diagram generation
+- **5.2.5** ✅ Implemented diagram customization options with color schemes
+
+#### 5.3 State Diagrams ✅
+- **5.3.1** ✅ Created state diagram Mermaid generator
+- **5.3.2** ✅ Implemented state transition visualization
+- **5.3.3** ✅ Added hazard state highlighting (placeholder implementation)
+- **5.3.4** ✅ Created transition condition display
+- **5.3.5** ✅ Implemented state diagram validation
+
+#### 5.4 Requirement Diagrams ✅
+- **5.4.1** ✅ Created requirement hierarchy Mermaid generator
+- **5.4.2** ✅ Implemented parent-child relationship visualization
+- **5.4.3** ✅ Added requirement selection interface
+- **5.4.4** ✅ Created requirement traceability display
+- **5.4.5** ✅ Implemented requirement filtering options
+
+#### 5.5 Diagram Viewer Implementation ✅
+- **5.5.1** ✅ Created SVG viewer widget with Qt integration
+- **5.5.2** ✅ Implemented zoom and pan functionality
+- **5.5.3** ✅ Added diagram export capabilities (PNG/SVG)
+- **5.5.4** ✅ Created diagram toolbar with zoom controls
+- **5.5.5** ✅ Implemented diagram interaction features
+
+#### 5.6 Diagram Management ✅
+- **5.6.1** ✅ Created diagram file management system
+- **5.6.2** ✅ Implemented diagram caching and refresh
+- **5.6.3** ✅ Added diagram versioning with baselines
+- **5.6.4** ✅ Created diagram directory structure
+- **5.6.5** ✅ Implemented diagram cleanup utilities
+
+#### 5.7 UI Integration ✅
+- **5.7.1** ✅ Integrated diagram tab into main window
+- **5.7.2** ✅ Added diagram type selection controls
+- **5.7.3** ✅ Created diagram generation interface
+- **5.7.4** ✅ Implemented diagram viewer within application
+- **5.7.5** ✅ Added error handling and user feedback
 
 ## Current Application Structure
 
@@ -160,13 +222,19 @@ STPA Tool/
 │   │   ├── connection.py      # Database connection management
 │   │   ├── entities.py        # Entity classes and repository pattern
 │   │   └── init.py            # Database initialization
+│   ├── diagrams/
+│   │   ├── __init__.py
+│   │   ├── generator.py       # Mermaid diagram generation
+│   │   ├── renderer.py        # Diagram rendering and file management
+│   │   ├── viewer.py          # Interactive diagram viewer widget
+│   │   └── types.py           # Diagram types and data structures
 │   ├── log_config/
 │   │   ├── __init__.py
 │   │   └── config.py          # Logging configuration
 │   ├── ui/
 │   │   ├── __init__.py
 │   │   ├── dialogs.py            # Dialog classes
-│   │   ├── main_window.py        # Main window with database integration
+│   │   ├── main_window.py        # Main window with diagram integration
 │   │   ├── hierarchy_tree.py     # Enhanced hierarchy tree widget
 │   │   ├── entity_dialogs.py     # Entity editing dialogs
 │   │   ├── base_entity_widget.py # Base entity management framework
@@ -255,24 +323,19 @@ shiboken6==6.9.1
 
 ## Next Steps
 
-All three foundational phases are now complete with a fully functional STPA Tool including database backend and interactive UI. The next major phase will focus on:
+Phase 5 is now complete with a comprehensive diagramming and visualization system. The next major phases will focus on:
 
-1. **Core Entity Management (Phase 4)**
-   - Interface, Asset, and Control Structure entities
-   - Loss scenarios and hazard analysis
-   - Control actions and feedback mechanisms
-   - Enhanced validation and data integrity
+1. **Import/Export and Collaboration (Phase 6)**
+   - JSON/Markdown export functionality
+   - Working directory export/import
+   - Branch and merge utilities for collaboration
+   - Baseline management system
 
-2. **STPA Analysis Framework (Phase 5)**
-   - Loss scenario analysis workflow
-   - Hazard identification and tracking
-   - Control structure modeling
-   - Safety constraint derivation
-
-3. **Testing Framework (Phase 7)**
-   - Unit tests for all components
-   - Integration testing
-   - UI testing with pytest-qt
+3. **Testing and Validation (Phase 7)**
+   - Comprehensive testing framework
+   - Data validation engine
+   - Warnings and validation tab implementation
+   - Performance testing for large datasets
 
 ## Testing Results ✅
 

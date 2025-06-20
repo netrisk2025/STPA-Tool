@@ -6,7 +6,8 @@ Contains the primary user interface layout and components.
 from PySide6.QtWidgets import (
     QMainWindow, QVBoxLayout, QHBoxLayout, QWidget, QSplitter,
     QMenuBar, QStatusBar, QToolBar, QLabel, QTreeWidget, QTabWidget,
-    QTableWidget, QTableWidgetItem, QPushButton, QHeaderView, QMessageBox
+    QTableWidget, QTableWidgetItem, QPushButton, QHeaderView, QMessageBox,
+    QComboBox
 )
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QAction, QIcon
@@ -18,8 +19,16 @@ from ..config.constants import (
 from ..log_config.config import get_logger
 from .hierarchy_tree import HierarchyTreeWidget
 from .entity_dialogs import SystemEditDialog, FunctionEditDialog, RequirementEditDialog
-from .entity_widgets import InterfaceWidget, AssetWidget, HazardWidget, LossWidget
-from ..database.entities import System, Function, Requirement, Interface, Asset, Hazard, Loss, EntityFactory
+from .entity_widgets import (
+    InterfaceWidget, AssetWidget, HazardWidget, LossWidget,
+    ControlStructureWidget, ControllerWidget
+)
+from ..database.entities import (
+    System, Function, Requirement, Interface, Asset, Hazard, Loss, 
+    ControlStructure, Controller, EntityFactory
+)
+from ..diagrams import DiagramGenerator, DiagramRenderer, DiagramViewer
+from ..diagrams.types import DiagramType
 
 logger = get_logger(__name__)
 
@@ -52,6 +61,15 @@ class MainWindow(QMainWindow):
         self.status_bar = None
         self.splitter = None
         self.current_system_id = None
+        
+        # Diagram components
+        self.diagram_generator = None
+        self.diagram_renderer = None
+        self.diagram_viewer = None
+        
+        # Initialize diagram components if database is available
+        if self.database_initializer:
+            self._setup_diagram_components()
         
         # Setup UI
         self._setup_ui()
@@ -151,9 +169,6 @@ class MainWindow(QMainWindow):
         # Functions tab
         self._setup_functions_tab()
         
-        # Interfaces tab
-        self._setup_interfaces_tab()
-        
         # Requirements tab
         self._setup_requirements_tab()
         
@@ -168,6 +183,15 @@ class MainWindow(QMainWindow):
         
         # Losses tab
         self._setup_losses_tab()
+        
+        # Control Structure tab
+        self._setup_control_structures_tab()
+        
+        # Controllers tab
+        self._setup_controllers_tab()
+        
+        # Diagrams tab
+        self._setup_diagrams_tab()
         
         # Warnings tab
         warnings_widget = QWidget()
@@ -796,3 +820,164 @@ class MainWindow(QMainWindow):
             losses_layout = QVBoxLayout(losses_widget)
             losses_layout.addWidget(QLabel("Losses - Setup Error"))
             self.content_tabs.addTab(losses_widget, "Losses")
+    
+    def _setup_control_structures_tab(self):
+        """Setup control structures management tab."""
+        try:
+            self.control_structures_widget = ControlStructureWidget(self.database_initializer)
+            self.content_tabs.addTab(self.control_structures_widget, "Control Structures")
+        except Exception as e:
+            logger.error(f"Failed to setup control structures tab: {str(e)}")
+            # Add fallback placeholder
+            control_structures_widget = QWidget()
+            control_structures_layout = QVBoxLayout(control_structures_widget)
+            control_structures_layout.addWidget(QLabel("Control Structures - Setup Error"))
+            self.content_tabs.addTab(control_structures_widget, "Control Structures")
+    
+    def _setup_controllers_tab(self):
+        """Setup controllers management tab."""
+        try:
+            self.controllers_widget = ControllerWidget(self.database_initializer)
+            self.content_tabs.addTab(self.controllers_widget, "Controllers")
+        except Exception as e:
+            logger.error(f"Failed to setup controllers tab: {str(e)}")
+            # Add fallback placeholder
+            controllers_widget = QWidget()
+            controllers_layout = QVBoxLayout(controllers_widget)
+            controllers_layout.addWidget(QLabel("Controllers - Setup Error"))
+            self.content_tabs.addTab(controllers_widget, "Controllers")
+    
+    def _setup_diagram_components(self):
+        """Initialize diagram generation and rendering components."""
+        try:
+            working_directory = self.config_manager.working_directory
+            
+            # Initialize diagram renderer
+            self.diagram_renderer = DiagramRenderer(working_directory)
+            
+            # Initialize diagram generator with database manager
+            self.diagram_generator = DiagramGenerator(self.database_initializer.db_manager)
+            
+            logger.info("Diagram components initialized successfully")
+            
+        except Exception as e:
+            logger.error(f"Failed to initialize diagram components: {str(e)}")
+    
+    def _setup_diagrams_tab(self):
+        """Setup diagrams management tab."""
+        try:
+            # Create diagram tab widget
+            diagrams_widget = QWidget()
+            diagrams_layout = QVBoxLayout(diagrams_widget)
+            
+            # Create diagram controls
+            controls_layout = QHBoxLayout()
+            
+            # Diagram type selector
+            self.diagram_type_combo = QComboBox()
+            self.diagram_type_combo.addItem("Control Structure", DiagramType.CONTROL_STRUCTURE)
+            self.diagram_type_combo.addItem("State Diagram", DiagramType.STATE_DIAGRAM)
+            self.diagram_type_combo.addItem("Requirement Hierarchy", DiagramType.REQUIREMENT_HIERARCHY)
+            self.diagram_type_combo.addItem("System Hierarchy", DiagramType.SYSTEM_HIERARCHY)
+            
+            # Generate button
+            generate_btn = QPushButton("Generate Diagram")
+            generate_btn.clicked.connect(self._generate_diagram)
+            
+            # Refresh button
+            refresh_btn = QPushButton("Refresh")
+            refresh_btn.clicked.connect(self._refresh_diagrams)
+            
+            controls_layout.addWidget(QLabel("Type:"))
+            controls_layout.addWidget(self.diagram_type_combo)
+            controls_layout.addWidget(generate_btn)
+            controls_layout.addWidget(refresh_btn)
+            controls_layout.addStretch()
+            
+            diagrams_layout.addLayout(controls_layout)
+            
+            # Create diagram viewer
+            self.diagram_viewer = DiagramViewer()
+            diagrams_layout.addWidget(self.diagram_viewer)
+            
+            self.content_tabs.addTab(diagrams_widget, "Diagrams")
+            
+        except Exception as e:
+            logger.error(f"Failed to setup diagrams tab: {str(e)}")
+            # Add fallback placeholder
+            diagrams_widget = QWidget()
+            diagrams_layout = QVBoxLayout(diagrams_widget)
+            diagrams_layout.addWidget(QLabel("Diagrams - Setup Error"))
+            self.content_tabs.addTab(diagrams_widget, "Diagrams")
+    
+    def _generate_diagram(self):
+        """Generate diagram for current system."""
+        if not self.current_system_id:
+            QMessageBox.warning(self, "No System Selected", "Please select a system to generate a diagram.")
+            return
+        
+        if not self.diagram_generator or not self.diagram_renderer:
+            QMessageBox.critical(self, "Diagram Error", "Diagram components not properly initialized.")
+            return
+        
+        try:
+            # Get selected diagram type
+            diagram_type = self.diagram_type_combo.currentData()
+            
+            # Generate diagram based on type
+            mermaid_source = ""
+            diagram_name = f"system_{self.current_system_id}_{diagram_type.value}"
+            
+            if diagram_type == DiagramType.CONTROL_STRUCTURE:
+                mermaid_source = self.diagram_generator.generate_control_structure_diagram(
+                    self.current_system_id
+                )
+            elif diagram_type == DiagramType.STATE_DIAGRAM:
+                mermaid_source = self.diagram_generator.generate_state_diagram(
+                    self.current_system_id
+                )
+            elif diagram_type == DiagramType.REQUIREMENT_HIERARCHY:
+                mermaid_source = self.diagram_generator.generate_requirement_hierarchy_diagram(
+                    self.current_system_id
+                )
+            elif diagram_type == DiagramType.SYSTEM_HIERARCHY:
+                mermaid_source = self.diagram_generator.generate_system_hierarchy_diagram(
+                    self.current_system_id
+                )
+            
+            if not mermaid_source:
+                QMessageBox.warning(self, "Generation Error", "Failed to generate diagram source.")
+                return
+            
+            # Render diagram
+            output_files = self.diagram_renderer.render_diagram(
+                mermaid_source,
+                diagram_name,
+                diagram_type,
+                output_formats=['svg', 'png']
+            )
+            
+            # Load SVG in viewer
+            if 'svg' in output_files:
+                self.diagram_viewer.load_diagram(output_files['svg'])
+                QMessageBox.information(
+                    self, 
+                    "Diagram Generated", 
+                    f"Diagram generated successfully!\nSVG: {output_files['svg']}"
+                )
+            else:
+                QMessageBox.warning(self, "Render Error", "Failed to render diagram to SVG.")
+                
+        except Exception as e:
+            logger.error(f"Error generating diagram: {str(e)}")
+            QMessageBox.critical(
+                self, 
+                "Diagram Generation Error", 
+                f"Failed to generate diagram:\n{str(e)}"
+            )
+    
+    def _refresh_diagrams(self):
+        """Refresh diagram display."""
+        if self.diagram_viewer:
+            # Could implement gallery refresh here
+            logger.info("Diagram refresh requested")

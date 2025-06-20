@@ -251,7 +251,9 @@ class Requirement(BaseEntity):
 @dataclass
 class Hazard(BaseEntity):
     """Hazard entity representing a system hazard."""
+    system_id: Optional[int] = None
     environment_id: Optional[int] = None
+    asset_id: Optional[int] = None
     h_name: str = ""
     h_description: str = ""
     
@@ -302,6 +304,7 @@ class Hazard(BaseEntity):
 @dataclass
 class Loss(BaseEntity):
     """Loss entity representing a system loss."""
+    system_id: int = 0
     asset_id: int = 0
     l_name: str = ""
     l_description: str = ""
@@ -339,6 +342,131 @@ class Loss(BaseEntity):
     def loss_name(self, value: str):
         """Set loss name (alias for l_name)."""
         self.l_name = value
+
+
+@dataclass
+class ControlStructure(BaseEntity):
+    """Control Structure entity representing a control system structure."""
+    system_id: int = 0
+    structure_name: str = ""
+    structure_description: str = ""
+    diagram_url: str = ""
+    
+    # Critical attributes
+    criticality: str = CRITICALITY_NON_CRITICAL
+    confidentiality: bool = False
+    confidentiality_description: str = ""
+    integrity: bool = False
+    integrity_description: str = ""
+    availability: bool = False
+    availability_description: str = ""
+    authenticity: bool = False
+    authenticity_description: str = ""
+    non_repudiation: bool = False
+    non_repudiation_description: str = ""
+    assurance: bool = False
+    assurance_description: str = ""
+    trustworthy: bool = False
+    trustworthy_description: str = ""
+    privacy: bool = False
+    privacy_description: str = ""
+    
+    @classmethod
+    def get_table_name(cls) -> str:
+        return "control_structures"
+
+
+@dataclass
+class Controller(BaseEntity):
+    """Controller entity representing a control system controller."""
+    system_id: int = 0
+    short_text_identifier: str = ""
+    controller_name: str = ""
+    controller_description: str = ""
+    
+    @classmethod
+    def get_table_name(cls) -> str:
+        return "controllers"
+
+
+@dataclass
+class ControlledProcess(BaseEntity):
+    """Controlled Process entity representing a controlled process."""
+    system_id: Optional[int] = None
+    function_id: Optional[int] = None
+    short_text_identifier: str = ""
+    cp_name: str = ""
+    cp_description: str = ""
+    
+    @classmethod
+    def get_table_name(cls) -> str:
+        return "controlled_processes"
+
+
+@dataclass
+class ControlAction(BaseEntity):
+    """Control Action entity representing a control action."""
+    control_algorithm_id: Optional[int] = None
+    ca_name: str = ""
+    ca_description: str = ""
+    unsafe: bool = False
+    unsecure: bool = False
+    
+    # Critical attributes
+    criticality: str = CRITICALITY_NON_CRITICAL
+    confidentiality: bool = False
+    confidentiality_description: str = ""
+    integrity: bool = False
+    integrity_description: str = ""
+    availability: bool = False
+    availability_description: str = ""
+    authenticity: bool = False
+    authenticity_description: str = ""
+    non_repudiation: bool = False
+    non_repudiation_description: str = ""
+    assurance: bool = False
+    assurance_description: str = ""
+    trustworthy: bool = False
+    trustworthy_description: str = ""
+    privacy: bool = False
+    privacy_description: str = ""
+    
+    @classmethod
+    def get_table_name(cls) -> str:
+        return "control_actions"
+
+
+@dataclass
+class Feedback(BaseEntity):
+    """Feedback entity representing a feedback signal."""
+    controlled_process_id: Optional[int] = None
+    process_model_id: Optional[int] = None
+    fb_name: str = ""
+    fb_description: str = ""
+    description: str = ""
+    
+    # Critical attributes
+    criticality: str = CRITICALITY_NON_CRITICAL
+    confidentiality: bool = False
+    confidentiality_description: str = ""
+    integrity: bool = False
+    integrity_description: str = ""
+    availability: bool = False
+    availability_description: str = ""
+    authenticity: bool = False
+    authenticity_description: str = ""
+    non_repudiation: bool = False
+    non_repudiation_description: str = ""
+    assurance: bool = False
+    assurance_description: str = ""
+    trustworthy: bool = False
+    trustworthy_description: str = ""
+    privacy: bool = False
+    privacy_description: str = ""
+    
+    @classmethod
+    def get_table_name(cls) -> str:
+        return "feedback"
 
 
 class EntityRepository:

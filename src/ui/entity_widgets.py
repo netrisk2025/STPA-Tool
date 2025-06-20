@@ -14,7 +14,10 @@ from PySide6.QtGui import QFont
 
 from .base_entity_widget import BaseEntityWidget
 from .entity_dialogs import CriticalAttributesWidget
-from ..database.entities import Interface, Asset, Hazard, Loss
+from ..database.entities import (
+    Interface, Asset, Hazard, Loss, ControlStructure, 
+    Controller, ControlledProcess, ControlAction, Feedback
+)
 from ..database.init import DatabaseInitializer
 from ..config.constants import WORKING_BASELINE
 from ..utils.hierarchy import HierarchyManager
@@ -491,8 +494,8 @@ class HazardWidget(BaseEntityWidget):
         self._setup_base_ui()
         
         # Configure table columns
-        self.entity_table.setColumnCount(4)
-        self.entity_table.setHorizontalHeaderLabels(["ID", "Name", "Asset", "Description"])
+        self.entity_table.setColumnCount(5)
+        self.entity_table.setHorizontalHeaderLabels(["ID", "Name", "System", "Asset", "Description"])
         
         header = self.entity_table.horizontalHeader()
         header.setSectionResizeMode(0, QHeaderView.ResizeToContents)
@@ -504,16 +507,16 @@ class HazardWidget(BaseEntityWidget):
     def _setup_validation(self):
         """Setup validation rules."""
         self.validator.add_rule(
-            "hazard_name",
+            "h_name",
             lambda x: x and len(x.strip()) > 0,
             "Hazard name is required"
         )
     
     def _setup_change_tracking(self):
         """Setup change tracking fields."""
-        self.change_tracker.track_field("hazard_name")
-        self.change_tracker.track_field("hazard_description")
-        self.change_tracker.track_field("environment_id")
+        self.change_tracker.track_field("h_name")
+        self.change_tracker.track_field("h_description")
+        self.change_tracker.track_field("system_id")
         self.change_tracker.track_field("asset_id")
     
     def _create_details_widget(self) -> QWidget:
@@ -543,8 +546,14 @@ class HazardWidget(BaseEntityWidget):
         self.description_edit.setMaximumHeight(100)
         basic_layout.addRow("Description:", self.description_edit)
         
-        # Note: Environment and Asset associations can be added later
-        # For now, keeping it simple
+        # System Association
+        self.system_combo = QComboBox()
+        self._load_systems()
+        basic_layout.addRow("Associated System:", self.system_combo)
+        
+        # Asset Association
+        self.asset_combo = QComboBox()
+        basic_layout.addRow("Associated Asset:", self.asset_combo)
         
         scroll_layout.addWidget(basic_group)
         
@@ -577,8 +586,8 @@ class HazardWidget(BaseEntityWidget):
         self.system_combo.currentIndexChanged.connect(self._on_system_changed)
         
         # Connect change tracking
-        self.name_edit.textChanged.connect(lambda: self.change_tracker.update_field("hazard_name", self.name_edit.text()))
-        self.description_edit.textChanged.connect(lambda: self.change_tracker.update_field("hazard_description", self.description_edit.toPlainText()))
+        self.name_edit.textChanged.connect(lambda: self.change_tracker.update_field("h_name", self.name_edit.text()))
+        self.description_edit.textChanged.connect(lambda: self.change_tracker.update_field("h_description", self.description_edit.toPlainText()))
         self.system_combo.currentIndexChanged.connect(lambda: self.change_tracker.update_field("system_id", self.system_combo.currentData()))
         self.asset_combo.currentIndexChanged.connect(lambda: self.change_tracker.update_field("asset_id", self.asset_combo.currentData()))
         
@@ -691,8 +700,8 @@ class HazardWidget(BaseEntityWidget):
     def _populate_details(self, entity: Hazard):
         """Populate details widget with hazard data."""
         self.hierarchy_edit.setText(entity.get_hierarchical_id())
-        self.name_edit.setText(entity.hazard_name)
-        self.description_edit.setPlainText(entity.hazard_description or "")
+        self.name_edit.setText(entity.h_name)
+        self.description_edit.setPlainText(entity.h_description or "")
         
         # Set system selection
         for i in range(self.system_combo.count()):
@@ -723,8 +732,8 @@ class HazardWidget(BaseEntityWidget):
             "system_hierarchy": hierarchy_text,
             "system_id": self.system_combo.currentData(),
             "asset_id": self.asset_combo.currentData(),
-            "hazard_name": self.name_edit.text().strip(),
-            "hazard_description": self.description_edit.toPlainText().strip(),
+            "h_name": self.name_edit.text().strip(),
+            "h_description": self.description_edit.toPlainText().strip(),
             "baseline": WORKING_BASELINE
         }
         
@@ -768,8 +777,8 @@ class LossWidget(BaseEntityWidget):
         self._setup_base_ui()
         
         # Configure table columns
-        self.entity_table.setColumnCount(3)
-        self.entity_table.setHorizontalHeaderLabels(["ID", "Name", "Description"])
+        self.entity_table.setColumnCount(4)
+        self.entity_table.setHorizontalHeaderLabels(["ID", "Name", "System", "Description"])
         
         header = self.entity_table.horizontalHeader()
         header.setSectionResizeMode(0, QHeaderView.ResizeToContents)
@@ -962,6 +971,455 @@ class LossWidget(BaseEntityWidget):
         self.hierarchy_edit.setEnabled(enabled and self.current_entity is None)
         self.name_edit.setEnabled(enabled)
         self.description_edit.setEnabled(enabled)
+        self.system_combo.setEnabled(enabled)
+        
+        self.save_btn.setEnabled(enabled)
+        self.cancel_btn.setEnabled(enabled)
+
+
+class ControlStructureWidget(BaseEntityWidget):
+    """
+    Widget for managing Control Structure entities.
+    """
+    
+    def __init__(self, database_initializer: DatabaseInitializer, parent=None):
+        """Initialize Control Structure widget."""
+        super().__init__(ControlStructure, database_initializer, parent)
+    
+    def _setup_ui(self):
+        """Setup the user interface."""
+        self._setup_base_ui()
+        
+        # Configure table columns
+        self.entity_table.setColumnCount(4)
+        self.entity_table.setHorizontalHeaderLabels(["ID", "Name", "System", "Description"])
+        
+        header = self.entity_table.horizontalHeader()
+        header.setSectionResizeMode(0, QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(1, QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(2, QHeaderView.ResizeToContents)
+        header.setStretchLastSection(True)
+    
+    def _setup_validation(self):
+        """Setup validation rules."""
+        self.validator.add_rule(
+            "structure_name",
+            lambda x: x and len(x.strip()) > 0,
+            "Control structure name is required"
+        )
+        
+        self.validator.add_rule(
+            "system_id",
+            lambda x: x and x > 0,
+            "Valid system must be selected"
+        )
+    
+    def _setup_change_tracking(self):
+        """Setup change tracking fields."""
+        self.change_tracker.track_field("structure_name")
+        self.change_tracker.track_field("structure_description")
+        self.change_tracker.track_field("system_id")
+    
+    def _create_details_widget(self) -> QWidget:
+        """Create the details/edit widget."""
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+        
+        # Scroll area for form
+        scroll = QScrollArea()
+        scroll_widget = QWidget()
+        scroll_layout = QVBoxLayout(scroll_widget)
+        
+        # Basic Information Group
+        basic_group = QGroupBox("Basic Information")
+        basic_layout = QFormLayout(basic_group)
+        
+        self.hierarchy_edit = QLineEdit()
+        self.hierarchy_edit.setPlaceholderText("CS-1, CS-1.1, etc.")
+        basic_layout.addRow("Hierarchical ID:", self.hierarchy_edit)
+        
+        self.name_edit = QLineEdit()
+        self.name_edit.setPlaceholderText("Enter control structure name...")
+        basic_layout.addRow("Structure Name*:", self.name_edit)
+        
+        self.description_edit = QTextEdit()
+        self.description_edit.setPlaceholderText("Enter control structure description...")
+        self.description_edit.setMaximumHeight(100)
+        basic_layout.addRow("Description:", self.description_edit)
+        
+        # System Association
+        self.system_combo = QComboBox()
+        self._load_systems()
+        basic_layout.addRow("Associated System*:", self.system_combo)
+        
+        # Diagram URL
+        self.diagram_url_edit = QLineEdit()
+        self.diagram_url_edit.setPlaceholderText("Enter diagram URL (optional)...")
+        basic_layout.addRow("Diagram URL:", self.diagram_url_edit)
+        
+        scroll_layout.addWidget(basic_group)
+        
+        # Critical Attributes
+        self.critical_attrs = CriticalAttributesWidget()
+        scroll_layout.addWidget(self.critical_attrs)
+        
+        scroll.setWidget(scroll_widget)
+        scroll.setWidgetResizable(True)
+        layout.addWidget(scroll)
+        
+        # Action buttons
+        button_layout = QHBoxLayout()
+        
+        self.save_btn = QPushButton("Save")
+        self.save_btn.clicked.connect(self.save_entity)
+        self.save_btn.setEnabled(False)
+        
+        self.cancel_btn = QPushButton("Cancel")
+        self.cancel_btn.clicked.connect(self.cancel_editing)
+        self.cancel_btn.setEnabled(False)
+        
+        button_layout.addWidget(self.save_btn)
+        button_layout.addWidget(self.cancel_btn)
+        button_layout.addStretch()
+        
+        layout.addLayout(button_layout)
+        
+        # Connect change tracking
+        self.name_edit.textChanged.connect(lambda: self.change_tracker.update_field("structure_name", self.name_edit.text()))
+        self.description_edit.textChanged.connect(lambda: self.change_tracker.update_field("structure_description", self.description_edit.toPlainText()))
+        self.system_combo.currentIndexChanged.connect(lambda: self.change_tracker.update_field("system_id", self.system_combo.currentData()))
+        
+        return widget
+    
+    def _load_systems(self):
+        """Load available systems into combo box."""
+        try:
+            self.system_combo.clear()
+            self.system_combo.addItem("Select System...", None)
+            
+            db_manager = self.database_initializer.get_database_manager()
+            connection = db_manager.get_connection()
+            
+            systems = connection.fetchall(
+                "SELECT id, system_hierarchy, system_name FROM systems WHERE baseline = ? ORDER BY system_hierarchy",
+                (WORKING_BASELINE,)
+            )
+            
+            for system in systems:
+                display_text = f"{system['system_hierarchy']} - {system['system_name']}"
+                self.system_combo.addItem(display_text, system['id'])
+                
+        except Exception as e:
+            logger.error(f"Failed to load systems: {str(e)}")
+    
+    def _populate_table(self, entities: List[ControlStructure]):
+        """Populate table with control structure data."""
+        self.entity_table.setRowCount(len(entities))
+        
+        for row, structure in enumerate(entities):
+            # Get system name
+            system_name = self._get_system_name(structure.system_id)
+            
+            self.entity_table.setItem(row, 0, QTableWidgetItem(structure.get_hierarchical_id()))
+            self.entity_table.setItem(row, 1, QTableWidgetItem(structure.structure_name))
+            self.entity_table.setItem(row, 2, QTableWidgetItem(system_name))
+            self.entity_table.setItem(row, 3, QTableWidgetItem(structure.structure_description or ""))
+            
+            # Store structure ID for selection
+            self.entity_table.item(row, 0).setData(Qt.UserRole, structure.id)
+    
+    def _get_system_name(self, system_id: int) -> str:
+        """Get system name by ID."""
+        try:
+            db_manager = self.database_initializer.get_database_manager()
+            connection = db_manager.get_connection()
+            
+            system = connection.fetchone(
+                "SELECT system_hierarchy, system_name FROM systems WHERE id = ?",
+                (system_id,)
+            )
+            
+            if system:
+                return f"{system['system_hierarchy']} - {system['system_name']}"
+            return f"System {system_id}"
+            
+        except Exception:
+            return f"System {system_id}"
+    
+    def _populate_details(self, entity: ControlStructure):
+        """Populate details widget with control structure data."""
+        self.hierarchy_edit.setText(entity.get_hierarchical_id())
+        self.name_edit.setText(entity.structure_name)
+        self.description_edit.setPlainText(entity.structure_description or "")
+        self.diagram_url_edit.setText(entity.diagram_url or "")
+        
+        # Set system selection
+        for i in range(self.system_combo.count()):
+            if self.system_combo.itemData(i) == entity.system_id:
+                self.system_combo.setCurrentIndex(i)
+                break
+        
+        self.critical_attrs.set_values(entity)
+        self.change_tracker.set_original_data(self._collect_form_data())
+    
+    def _collect_form_data(self) -> Dict[str, Any]:
+        """Collect data from form fields."""
+        # Parse hierarchical ID
+        hierarchy_text = self.hierarchy_edit.text().strip()
+        parsed_id = HierarchyManager.parse_hierarchical_id(hierarchy_text)
+        
+        data = {
+            "type_identifier": parsed_id.type_identifier if parsed_id else "CS",
+            "level_identifier": parsed_id.level_identifier if parsed_id else 0,
+            "sequential_identifier": parsed_id.sequential_identifier if parsed_id else 1,
+            "system_hierarchy": hierarchy_text,
+            "system_id": self.system_combo.currentData(),
+            "structure_name": self.name_edit.text().strip(),
+            "structure_description": self.description_edit.toPlainText().strip(),
+            "diagram_url": self.diagram_url_edit.text().strip(),
+            "baseline": WORKING_BASELINE
+        }
+        
+        # Add critical attributes
+        critical_values = self.critical_attrs.get_values()
+        data.update(critical_values)
+        
+        return data
+    
+    def _clear_details(self):
+        """Clear details form."""
+        self.hierarchy_edit.setText("CS-1")
+        self.name_edit.clear()
+        self.description_edit.clear()
+        self.diagram_url_edit.clear()
+        self.system_combo.setCurrentIndex(0)
+    
+    def _set_editing_mode(self, enabled: bool):
+        """Enable/disable editing mode."""
+        self.hierarchy_edit.setEnabled(enabled and self.current_entity is None)
+        self.name_edit.setEnabled(enabled)
+        self.description_edit.setEnabled(enabled)
+        self.diagram_url_edit.setEnabled(enabled)
+        self.system_combo.setEnabled(enabled)
+        
+        self.save_btn.setEnabled(enabled)
+        self.cancel_btn.setEnabled(enabled)
+
+
+class ControllerWidget(BaseEntityWidget):
+    """
+    Widget for managing Controller entities.
+    """
+    
+    def __init__(self, database_initializer: DatabaseInitializer, parent=None):
+        """Initialize Controller widget."""
+        super().__init__(Controller, database_initializer, parent)
+    
+    def _setup_ui(self):
+        """Setup the user interface."""
+        self._setup_base_ui()
+        
+        # Configure table columns
+        self.entity_table.setColumnCount(4)
+        self.entity_table.setHorizontalHeaderLabels(["ID", "Name", "System", "Description"])
+        
+        header = self.entity_table.horizontalHeader()
+        header.setSectionResizeMode(0, QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(1, QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(2, QHeaderView.ResizeToContents)
+        header.setStretchLastSection(True)
+    
+    def _setup_validation(self):
+        """Setup validation rules."""
+        self.validator.add_rule(
+            "controller_name",
+            lambda x: x and len(x.strip()) > 0,
+            "Controller name is required"
+        )
+        
+        self.validator.add_rule(
+            "system_id",
+            lambda x: x and x > 0,
+            "Valid system must be selected"
+        )
+    
+    def _setup_change_tracking(self):
+        """Setup change tracking fields."""
+        self.change_tracker.track_field("controller_name")
+        self.change_tracker.track_field("controller_description")
+        self.change_tracker.track_field("system_id")
+    
+    def _create_details_widget(self) -> QWidget:
+        """Create the details/edit widget."""
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+        
+        # Scroll area for form
+        scroll = QScrollArea()
+        scroll_widget = QWidget()
+        scroll_layout = QVBoxLayout(scroll_widget)
+        
+        # Basic Information Group
+        basic_group = QGroupBox("Basic Information")
+        basic_layout = QFormLayout(basic_group)
+        
+        self.hierarchy_edit = QLineEdit()
+        self.hierarchy_edit.setPlaceholderText("C-1, C-1.1, etc.")
+        basic_layout.addRow("Hierarchical ID:", self.hierarchy_edit)
+        
+        self.name_edit = QLineEdit()
+        self.name_edit.setPlaceholderText("Enter controller name...")
+        basic_layout.addRow("Controller Name*:", self.name_edit)
+        
+        self.description_edit = QTextEdit()
+        self.description_edit.setPlaceholderText("Enter controller description...")
+        self.description_edit.setMaximumHeight(100)
+        basic_layout.addRow("Description:", self.description_edit)
+        
+        # System Association
+        self.system_combo = QComboBox()
+        self._load_systems()
+        basic_layout.addRow("Associated System*:", self.system_combo)
+        
+        # Short Text Identifier
+        self.short_text_edit = QLineEdit()
+        self.short_text_edit.setPlaceholderText("Enter short identifier...")
+        basic_layout.addRow("Short Identifier:", self.short_text_edit)
+        
+        scroll_layout.addWidget(basic_group)
+        
+        scroll.setWidget(scroll_widget)
+        scroll.setWidgetResizable(True)
+        layout.addWidget(scroll)
+        
+        # Action buttons
+        button_layout = QHBoxLayout()
+        
+        self.save_btn = QPushButton("Save")
+        self.save_btn.clicked.connect(self.save_entity)
+        self.save_btn.setEnabled(False)
+        
+        self.cancel_btn = QPushButton("Cancel")
+        self.cancel_btn.clicked.connect(self.cancel_editing)
+        self.cancel_btn.setEnabled(False)
+        
+        button_layout.addWidget(self.save_btn)
+        button_layout.addWidget(self.cancel_btn)
+        button_layout.addStretch()
+        
+        layout.addLayout(button_layout)
+        
+        # Connect change tracking
+        self.name_edit.textChanged.connect(lambda: self.change_tracker.update_field("controller_name", self.name_edit.text()))
+        self.description_edit.textChanged.connect(lambda: self.change_tracker.update_field("controller_description", self.description_edit.toPlainText()))
+        self.system_combo.currentIndexChanged.connect(lambda: self.change_tracker.update_field("system_id", self.system_combo.currentData()))
+        
+        return widget
+    
+    def _load_systems(self):
+        """Load available systems into combo box."""
+        try:
+            self.system_combo.clear()
+            self.system_combo.addItem("Select System...", None)
+            
+            db_manager = self.database_initializer.get_database_manager()
+            connection = db_manager.get_connection()
+            
+            systems = connection.fetchall(
+                "SELECT id, system_hierarchy, system_name FROM systems WHERE baseline = ? ORDER BY system_hierarchy",
+                (WORKING_BASELINE,)
+            )
+            
+            for system in systems:
+                display_text = f"{system['system_hierarchy']} - {system['system_name']}"
+                self.system_combo.addItem(display_text, system['id'])
+                
+        except Exception as e:
+            logger.error(f"Failed to load systems: {str(e)}")
+    
+    def _populate_table(self, entities: List[Controller]):
+        """Populate table with controller data."""
+        self.entity_table.setRowCount(len(entities))
+        
+        for row, controller in enumerate(entities):
+            # Get system name
+            system_name = self._get_system_name(controller.system_id)
+            
+            self.entity_table.setItem(row, 0, QTableWidgetItem(controller.get_hierarchical_id()))
+            self.entity_table.setItem(row, 1, QTableWidgetItem(controller.controller_name))
+            self.entity_table.setItem(row, 2, QTableWidgetItem(system_name))
+            self.entity_table.setItem(row, 3, QTableWidgetItem(controller.controller_description or ""))
+            
+            # Store controller ID for selection
+            self.entity_table.item(row, 0).setData(Qt.UserRole, controller.id)
+    
+    def _get_system_name(self, system_id: int) -> str:
+        """Get system name by ID."""
+        try:
+            db_manager = self.database_initializer.get_database_manager()
+            connection = db_manager.get_connection()
+            
+            system = connection.fetchone(
+                "SELECT system_hierarchy, system_name FROM systems WHERE id = ?",
+                (system_id,)
+            )
+            
+            if system:
+                return f"{system['system_hierarchy']} - {system['system_name']}"
+            return f"System {system_id}"
+            
+        except Exception:
+            return f"System {system_id}"
+    
+    def _populate_details(self, entity: Controller):
+        """Populate details widget with controller data."""
+        self.hierarchy_edit.setText(entity.get_hierarchical_id())
+        self.name_edit.setText(entity.controller_name)
+        self.description_edit.setPlainText(entity.controller_description or "")
+        self.short_text_edit.setText(entity.short_text_identifier or "")
+        
+        # Set system selection
+        for i in range(self.system_combo.count()):
+            if self.system_combo.itemData(i) == entity.system_id:
+                self.system_combo.setCurrentIndex(i)
+                break
+        
+        self.change_tracker.set_original_data(self._collect_form_data())
+    
+    def _collect_form_data(self) -> Dict[str, Any]:
+        """Collect data from form fields."""
+        # Parse hierarchical ID
+        hierarchy_text = self.hierarchy_edit.text().strip()
+        parsed_id = HierarchyManager.parse_hierarchical_id(hierarchy_text)
+        
+        data = {
+            "type_identifier": parsed_id.type_identifier if parsed_id else "C",
+            "level_identifier": parsed_id.level_identifier if parsed_id else 0,
+            "sequential_identifier": parsed_id.sequential_identifier if parsed_id else 1,
+            "system_hierarchy": hierarchy_text,
+            "system_id": self.system_combo.currentData(),
+            "controller_name": self.name_edit.text().strip(),
+            "controller_description": self.description_edit.toPlainText().strip(),
+            "short_text_identifier": self.short_text_edit.text().strip(),
+            "baseline": WORKING_BASELINE
+        }
+        
+        return data
+    
+    def _clear_details(self):
+        """Clear details form."""
+        self.hierarchy_edit.setText("C-1")
+        self.name_edit.clear()
+        self.description_edit.clear()
+        self.short_text_edit.clear()
+        self.system_combo.setCurrentIndex(0)
+    
+    def _set_editing_mode(self, enabled: bool):
+        """Enable/disable editing mode."""
+        self.hierarchy_edit.setEnabled(enabled and self.current_entity is None)
+        self.name_edit.setEnabled(enabled)
+        self.description_edit.setEnabled(enabled)
+        self.short_text_edit.setEnabled(enabled)
         self.system_combo.setEnabled(enabled)
         
         self.save_btn.setEnabled(enabled)
