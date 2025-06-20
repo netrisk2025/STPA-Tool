@@ -853,10 +853,11 @@ class MainWindow(QMainWindow):
             working_directory = self.config_manager.working_directory
             
             # Initialize diagram renderer
-            self.diagram_renderer = DiagramRenderer(working_directory)
+            self.diagram_renderer = DiagramRenderer()
             
-            # Initialize diagram generator with database manager
-            self.diagram_generator = DiagramGenerator(self.database_initializer.db_manager)
+            # Initialize diagram generator with output directory
+            diagram_output_dir = working_directory / 'diagrams'
+            self.diagram_generator = DiagramGenerator(diagram_output_dir)
             
             logger.info("Diagram components initialized successfully")
             
