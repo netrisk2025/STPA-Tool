@@ -151,6 +151,57 @@ This document tracks the development progress of the STPA Tool (Systems-Theoreti
 - ✅ Implemented error handling and fallback placeholders
 - ✅ Fixed entity field mappings and table configurations
 
+### Phase 5: Diagramming and Visualization ✅ **COMPLETED**
+
+#### 5.1 Mermaid.js Integration ✅
+- **5.1.1** ✅ Installed and configured Mermaid CLI (v11.6.0)
+- **5.1.2** ✅ Created Mermaid process execution wrapper in DiagramRenderer
+- **5.1.3** ✅ Implemented diagram generation pipeline with error handling
+- **5.1.4** ✅ Added diagram format validation and syntax checking
+- **5.1.5** ✅ Created diagram file management system with baseline support
+
+#### 5.2 Control Structure Diagrams ✅
+- **5.2.1** ✅ Created control structure Mermaid generator
+- **5.2.2** ✅ Implemented controller-process relationship visualization
+- **5.2.3** ✅ Added control action and feedback display capabilities
+- **5.2.4** ✅ Created automatic layout algorithms for diagram generation
+- **5.2.5** ✅ Implemented diagram customization options with color schemes
+
+#### 5.3 State Diagrams ✅
+- **5.3.1** ✅ Created state diagram Mermaid generator
+- **5.3.2** ✅ Implemented state transition visualization
+- **5.3.3** ✅ Added hazard state highlighting (placeholder implementation)
+- **5.3.4** ✅ Created transition condition display
+- **5.3.5** ✅ Implemented state diagram validation
+
+#### 5.4 Requirement Diagrams ✅
+- **5.4.1** ✅ Created requirement hierarchy Mermaid generator
+- **5.4.2** ✅ Implemented parent-child relationship visualization
+- **5.4.3** ✅ Added requirement selection interface
+- **5.4.4** ✅ Created requirement traceability display
+- **5.4.5** ✅ Implemented requirement filtering options
+
+#### 5.5 Diagram Viewer Implementation ✅
+- **5.5.1** ✅ Created SVG viewer widget with Qt integration
+- **5.5.2** ✅ Implemented zoom and pan functionality
+- **5.5.3** ✅ Added diagram export capabilities (PNG/SVG)
+- **5.5.4** ✅ Created diagram toolbar with zoom controls
+- **5.5.5** ✅ Implemented diagram interaction features
+
+#### 5.6 Diagram Management ✅
+- **5.6.1** ✅ Created diagram file management system
+- **5.6.2** ✅ Implemented diagram caching and refresh
+- **5.6.3** ✅ Added diagram versioning with baselines
+- **5.6.4** ✅ Created diagram directory structure
+- **5.6.5** ✅ Implemented diagram cleanup utilities
+
+#### 5.7 UI Integration ✅
+- **5.7.1** ✅ Integrated diagram tab into main window
+- **5.7.2** ✅ Added diagram type selection controls
+- **5.7.3** ✅ Created diagram generation interface
+- **5.7.4** ✅ Implemented diagram viewer within application
+- **5.7.5** ✅ Added error handling and user feedback
+
 ## Current Application Structure
 
 ```
@@ -171,13 +222,19 @@ STPA Tool/
 │   │   ├── connection.py      # Database connection management
 │   │   ├── entities.py        # Entity classes and repository pattern
 │   │   └── init.py            # Database initialization
+│   ├── diagrams/
+│   │   ├── __init__.py
+│   │   ├── generator.py       # Mermaid diagram generation
+│   │   ├── renderer.py        # Diagram rendering and file management
+│   │   ├── viewer.py          # Interactive diagram viewer widget
+│   │   └── types.py           # Diagram types and data structures
 │   ├── log_config/
 │   │   ├── __init__.py
 │   │   └── config.py          # Logging configuration
 │   ├── ui/
 │   │   ├── __init__.py
 │   │   ├── dialogs.py            # Dialog classes
-│   │   ├── main_window.py        # Main window with database integration
+│   │   ├── main_window.py        # Main window with diagram integration
 │   │   ├── hierarchy_tree.py     # Enhanced hierarchy tree widget
 │   │   ├── entity_dialogs.py     # Entity editing dialogs
 │   │   ├── base_entity_widget.py # Base entity management framework
@@ -266,16 +323,9 @@ shiboken6==6.9.1
 
 ## Next Steps
 
-Phase 4 is now complete with a comprehensive entity management system for all STPA entities. The next major phases will focus on:
+Phase 5 is now complete with a comprehensive diagramming and visualization system. The next major phases will focus on:
 
-1. **Diagramming and Visualization (Phase 5)**
-   - Mermaid.js integration for diagram generation
-   - Control structure diagram visualization
-   - State diagram generation and rendering
-   - Requirement hierarchy visualization
-   - Interactive diagram viewer with zoom/pan
-
-2. **Import/Export and Collaboration (Phase 6)**
+1. **Import/Export and Collaboration (Phase 6)**
    - JSON/Markdown export functionality
    - Working directory export/import
    - Branch and merge utilities for collaboration
