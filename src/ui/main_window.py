@@ -335,7 +335,7 @@ class MainWindow(QMainWindow):
                 <p><strong>ID:</strong> {system.get_hierarchical_id()}</p>
                 <p><strong>Description:</strong> {system.system_description or 'No description'}</p>
                 <p><strong>Baseline:</strong> {system.baseline}</p>
-                <p><strong>Created:</strong> {system.created_date}</p>
+                <p><strong>Created:</strong> {system.created_at}</p>
                 """)
                 
                 # Enable edit button
@@ -853,8 +853,8 @@ class MainWindow(QMainWindow):
             return
         
         try:
-            config = self.config_manager.get_config()
-            working_dir = config.get('working_directory')
+            config = self.config_manager.config
+            working_dir = config.working_directory
             
             if not working_dir or not os.path.exists(working_dir):
                 QMessageBox.warning(
@@ -1105,8 +1105,8 @@ class MainWindow(QMainWindow):
             db_manager = self.database_initializer.get_database_manager()
             db_connection = db_manager.get_connection()
             
-            config = self.config_manager.get_config()
-            working_directory = config.get('working_directory', '')
+            config = self.config_manager.config
+            working_directory = config.working_directory or ''
             
             if not working_directory:
                 logger.warning("No working directory configured for collaboration components")
