@@ -3,6 +3,7 @@ Main window for STPA Tool
 Contains the primary user interface layout and components.
 """
 
+import os
 from PySide6.QtWidgets import (
     QMainWindow, QVBoxLayout, QHBoxLayout, QWidget, QSplitter,
     QMenuBar, QStatusBar, QToolBar, QLabel, QTreeWidget, QTabWidget,
@@ -23,11 +24,16 @@ from .entity_widgets import (
     InterfaceWidget, AssetWidget, HazardWidget, LossWidget,
     ControlStructureWidget, ControllerWidget
 )
+from .export_dialogs import JsonExportDialog, MarkdownExportDialog, ArchiveExportDialog
+from .baseline_dialogs import BaselineCreationDialog, BaselineManagementDialog
+from .collaboration_dialogs import BranchCreationDialog, BranchManagementDialog
 from ..database.entities import (
     System, Function, Requirement, Interface, Asset, Hazard, Loss, 
     ControlStructure, Controller, EntityFactory
 )
 from ..diagrams import DiagramGenerator, DiagramRenderer, DiagramViewer
+from ..database.baseline_manager import BaselineManager
+from ..collaboration import BranchManager, MergeManager
 from ..diagrams.types import DiagramType
 
 logger = get_logger(__name__)
@@ -67,9 +73,15 @@ class MainWindow(QMainWindow):
         self.diagram_renderer = None
         self.diagram_viewer = None
         
-        # Initialize diagram components if database is available
+        # Collaboration components
+        self.baseline_manager = None
+        self.branch_manager = None
+        self.merge_manager = None
+        
+        # Initialize components if database is available
         if self.database_initializer:
             self._setup_diagram_components()
+            self._setup_collaboration_components()
         
         # Setup UI
         self._setup_ui()
@@ -617,6 +629,12 @@ class MainWindow(QMainWindow):
         md_export_action.triggered.connect(self._export_markdown)
         export_menu.addAction(md_export_action)
         
+        export_menu.addSeparator()
+        
+        archive_export_action = QAction("Export &Working Directory", self)
+        archive_export_action.triggered.connect(self._export_working_directory)
+        export_menu.addAction(archive_export_action)
+        
         file_menu.addSeparator()
         
         # Exit action
@@ -635,9 +653,35 @@ class MainWindow(QMainWindow):
         create_baseline_action.triggered.connect(self._create_baseline)
         baseline_menu.addAction(create_baseline_action)
         
+        manage_baselines_action = QAction("&Manage Baselines", self)
+        manage_baselines_action.triggered.connect(self._manage_baselines)
+        baseline_menu.addAction(manage_baselines_action)
+        
+        baseline_menu.addSeparator()
+        
         load_baseline_action = QAction("&Load Baseline", self)
         load_baseline_action.triggered.connect(self._load_baseline)
         baseline_menu.addAction(load_baseline_action)
+        
+        # Collaboration menu
+        collaboration_menu = menubar.addMenu("&Collaboration")
+        
+        # Branch actions
+        branch_menu = collaboration_menu.addMenu("&Branches")
+        
+        create_branch_action = QAction("&Create Branch", self)
+        create_branch_action.triggered.connect(self._create_branch)
+        branch_menu.addAction(create_branch_action)
+        
+        manage_branches_action = QAction("&Manage Branches", self)
+        manage_branches_action.triggered.connect(self._manage_branches)
+        branch_menu.addAction(manage_branches_action)
+        
+        collaboration_menu.addSeparator()
+        
+        merge_branch_action = QAction("&Merge Branch", self)
+        merge_branch_action.triggered.connect(self._merge_branch)
+        collaboration_menu.addAction(merge_branch_action)
         
         # View menu
         view_menu = menubar.addMenu("&View")
@@ -736,22 +780,209 @@ class MainWindow(QMainWindow):
     def _export_json(self):
         """Handle JSON export action."""
         logger.info("JSON export action triggered")
-        # TODO: Implement JSON export functionality
+        
+        # Check if we have a selected system
+        if not self.current_system_id:
+            QMessageBox.warning(
+                self, 
+                "No System Selected", 
+                "Please select a system in the hierarchy tree before exporting."
+            )
+            return
+        
+        # Check database connection
+        if not self.database_initializer:
+            QMessageBox.warning(self, "No Database", "No database connection available.")
+            return
+        
+        try:
+            db_manager = self.database_initializer.get_database_manager()
+            db_connection = db_manager.get_connection()
+            
+            dialog = JsonExportDialog(self, db_connection, self.current_system_id)
+            dialog.exec()
+            
+        except Exception as e:
+            logger.error(f"Error opening JSON export dialog: {str(e)}")
+            QMessageBox.critical(
+                self,
+                "Export Error",
+                f"Failed to open JSON export dialog:\n\n{str(e)}"
+            )
     
     def _export_markdown(self):
         """Handle Markdown export action."""
         logger.info("Markdown export action triggered")
-        # TODO: Implement Markdown export functionality
+        
+        # Check if we have a selected system
+        if not self.current_system_id:
+            QMessageBox.warning(
+                self, 
+                "No System Selected", 
+                "Please select a system in the hierarchy tree before exporting."
+            )
+            return
+        
+        # Check database connection
+        if not self.database_initializer:
+            QMessageBox.warning(self, "No Database", "No database connection available.")
+            return
+        
+        try:
+            db_manager = self.database_initializer.get_database_manager()
+            db_connection = db_manager.get_connection()
+            
+            dialog = MarkdownExportDialog(self, db_connection, self.current_system_id)
+            dialog.exec()
+            
+        except Exception as e:
+            logger.error(f"Error opening Markdown export dialog: {str(e)}")
+            QMessageBox.critical(
+                self,
+                "Export Error",
+                f"Failed to open Markdown export dialog:\n\n{str(e)}"
+            )
+    
+    def _export_working_directory(self):
+        """Handle working directory export action."""
+        logger.info("Working directory export action triggered")
+        
+        # Get the working directory from config
+        if not self.config_manager:
+            QMessageBox.warning(self, "No Configuration", "No configuration manager available.")
+            return
+        
+        try:
+            config = self.config_manager.get_config()
+            working_dir = config.get('working_directory')
+            
+            if not working_dir or not os.path.exists(working_dir):
+                QMessageBox.warning(
+                    self,
+                    "No Working Directory",
+                    "No valid working directory configured."
+                )
+                return
+            
+            dialog = ArchiveExportDialog(self, working_dir)
+            dialog.exec()
+            
+        except Exception as e:
+            logger.error(f"Error opening working directory export dialog: {str(e)}")
+            QMessageBox.critical(
+                self,
+                "Export Error",
+                f"Failed to open working directory export dialog:\n\n{str(e)}"
+            )
     
     def _create_baseline(self):
         """Handle create baseline action."""
         logger.info("Create baseline action triggered")
-        # TODO: Implement create baseline functionality
+        
+        if not self.baseline_manager:
+            QMessageBox.warning(self, "No Baseline Manager", "Baseline management is not available.")
+            return
+        
+        try:
+            dialog = BaselineCreationDialog(self, self.baseline_manager)
+            dialog.exec()
+            
+        except Exception as e:
+            logger.error(f"Error opening baseline creation dialog: {str(e)}")
+            QMessageBox.critical(
+                self,
+                "Error",
+                f"Failed to open baseline creation dialog:\n\n{str(e)}"
+            )
+    
+    def _manage_baselines(self):
+        """Handle manage baselines action."""
+        logger.info("Manage baselines action triggered")
+        
+        if not self.baseline_manager:
+            QMessageBox.warning(self, "No Baseline Manager", "Baseline management is not available.")
+            return
+        
+        try:
+            dialog = BaselineManagementDialog(self, self.baseline_manager)
+            dialog.exec()
+            
+        except Exception as e:
+            logger.error(f"Error opening baseline management dialog: {str(e)}")
+            QMessageBox.critical(
+                self,
+                "Error",
+                f"Failed to open baseline management dialog:\n\n{str(e)}"
+            )
     
     def _load_baseline(self):
         """Handle load baseline action."""
         logger.info("Load baseline action triggered")
-        # TODO: Implement load baseline functionality
+        
+        if not self.baseline_manager:
+            QMessageBox.warning(self, "No Baseline Manager", "Baseline management is not available.")
+            return
+        
+        # Open baseline management dialog in load mode
+        self._manage_baselines()
+    
+    def _create_branch(self):
+        """Handle create branch action."""
+        logger.info("Create branch action triggered")
+        
+        if not self.branch_manager:
+            QMessageBox.warning(self, "No Branch Manager", "Branch management is not available.")
+            return
+        
+        if not self.database_initializer:
+            QMessageBox.warning(self, "No Database", "No database connection available.")
+            return
+        
+        try:
+            db_manager = self.database_initializer.get_database_manager()
+            db_connection = db_manager.get_connection()
+            
+            dialog = BranchCreationDialog(self, self.branch_manager, db_connection)
+            dialog.exec()
+            
+        except Exception as e:
+            logger.error(f"Error opening branch creation dialog: {str(e)}")
+            QMessageBox.critical(
+                self,
+                "Error",
+                f"Failed to open branch creation dialog:\n\n{str(e)}"
+            )
+    
+    def _manage_branches(self):
+        """Handle manage branches action."""
+        logger.info("Manage branches action triggered")
+        
+        if not self.branch_manager or not self.merge_manager:
+            QMessageBox.warning(self, "No Branch Manager", "Branch management is not available.")
+            return
+        
+        try:
+            dialog = BranchManagementDialog(self, self.branch_manager, self.merge_manager)
+            dialog.exec()
+            
+        except Exception as e:
+            logger.error(f"Error opening branch management dialog: {str(e)}")
+            QMessageBox.critical(
+                self,
+                "Error",
+                f"Failed to open branch management dialog:\n\n{str(e)}"
+            )
+    
+    def _merge_branch(self):
+        """Handle merge branch action."""
+        logger.info("Merge branch action triggered")
+        
+        if not self.merge_manager:
+            QMessageBox.warning(self, "No Merge Manager", "Merge functionality is not available.")
+            return
+        
+        # Open branch management dialog which includes merge functionality
+        self._manage_branches()
     
     def _show_about(self):
         """Show about dialog."""
@@ -863,6 +1094,36 @@ class MainWindow(QMainWindow):
             
         except Exception as e:
             logger.error(f"Failed to initialize diagram components: {str(e)}")
+    
+    def _setup_collaboration_components(self):
+        """Setup baseline and collaboration managers."""
+        try:
+            if not self.database_initializer or not self.config_manager:
+                return
+            
+            # Get database connection and working directory
+            db_manager = self.database_initializer.get_database_manager()
+            db_connection = db_manager.get_connection()
+            
+            config = self.config_manager.get_config()
+            working_directory = config.get('working_directory', '')
+            
+            if not working_directory:
+                logger.warning("No working directory configured for collaboration components")
+                return
+            
+            # Initialize managers
+            self.baseline_manager = BaselineManager(db_connection, working_directory)
+            self.branch_manager = BranchManager(db_connection, working_directory)
+            self.merge_manager = MergeManager(db_connection, working_directory)
+            
+            # Ensure baseline metadata table exists
+            self.baseline_manager.ensure_baseline_metadata_table()
+            
+            logger.info("Collaboration components initialized successfully")
+            
+        except Exception as e:
+            logger.error(f"Failed to setup collaboration components: {str(e)}")
     
     def _setup_diagrams_tab(self):
         """Setup diagrams management tab."""

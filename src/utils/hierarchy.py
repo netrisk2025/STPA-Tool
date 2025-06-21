@@ -75,7 +75,7 @@ class HierarchyManager:
     }
     
     # Regex pattern for parsing hierarchical IDs  
-    ID_PATTERN = re.compile(r'^([A-Z]+)-(\d+)(?:\.(\d+))?$')
+    ID_PATTERN = re.compile(r'^([A-Z]+)-(\d+(?:\.\d+)*)$')
     
     @classmethod
     def parse_hierarchical_id(cls, id_string: str) -> Optional[HierarchicalID]:
@@ -94,14 +94,20 @@ class HierarchyManager:
                 return None
             
             type_id = match.group(1)
-            # For simple IDs like "S-1", level_identifier should be 0, sequential_identifier should be 1
-            # For complex IDs like "S-1.2", level_identifier should be 1, sequential_identifier should be 2
-            if match.group(3):  # Has dot notation
-                level_id = int(match.group(2))
-                seq_id = int(match.group(3))
-            else:  # Simple notation like S-1
+            numbers_part = match.group(2)
+            
+            # Split by dots to get all levels
+            number_parts = numbers_part.split('.')
+            
+            if len(number_parts) == 1:
+                # Simple notation like "S-1"
                 level_id = 0
-                seq_id = int(match.group(2))
+                seq_id = int(number_parts[0])
+            else:
+                # Complex notation like "S-1.2" or "S-1.2.3"
+                # Use the first number as level, last number as sequential
+                level_id = int(number_parts[0])
+                seq_id = int(number_parts[-1])
             
             # Validate type identifier
             if type_id not in cls.VALID_TYPES:

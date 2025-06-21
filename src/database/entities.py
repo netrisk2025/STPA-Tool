@@ -469,6 +469,99 @@ class Feedback(BaseEntity):
         return "feedback"
 
 
+@dataclass
+class Constraint(BaseEntity):
+    """Database entity for constraints."""
+    constraint_name: str = ""
+    constraint_description: str = ""
+    
+    @classmethod
+    def get_table_name(cls) -> str:
+        return "constraints"
+
+
+@dataclass
+class Environment(BaseEntity):
+    """Database entity for environments."""
+    environment_name: str = ""
+    environment_description: str = ""
+    operational_context: str = ""
+    environmental_conditions: str = ""
+    
+    @classmethod
+    def get_table_name(cls) -> str:
+        return "environments"
+
+
+@dataclass  
+class StateDiagram(BaseEntity):
+    """Database entity for state diagrams."""
+    sd_name: str = ""
+    sd_description: str = ""
+    diagram_url: str = ""
+    
+    @classmethod
+    def get_table_name(cls) -> str:
+        return "state_diagrams"
+
+
+@dataclass
+class State(BaseEntity):
+    """Database entity for states."""
+    short_text_identifier: str = ""
+    state_description: str = ""
+    criticality: str = CRITICALITY_NON_CRITICAL
+    confidentiality: bool = False
+    integrity: bool = False
+    availability: bool = False
+    authenticity: bool = False
+    non_repudiation: bool = False
+    assurance: bool = False
+    trustworthy: bool = False
+    privacy: bool = False
+    confidentiality_description: str = ""
+    integrity_description: str = ""
+    availability_description: str = ""
+    authenticity_description: str = ""
+    non_repudiation_description: str = ""
+    assurance_description: str = ""
+    trustworthy_description: str = ""
+    privacy_description: str = ""
+    
+    @classmethod
+    def get_table_name(cls) -> str:
+        return "states"
+
+
+@dataclass
+class SafetySecurityControl(BaseEntity):
+    """Database entity for safety and security controls."""
+    sc_name: str = ""
+    sc_description: str = ""
+    description: str = ""
+    criticality: str = CRITICALITY_NON_CRITICAL
+    confidentiality: bool = False
+    integrity: bool = False
+    availability: bool = False
+    authenticity: bool = False
+    non_repudiation: bool = False
+    assurance: bool = False
+    trustworthy: bool = False
+    privacy: bool = False
+    confidentiality_description: str = ""
+    integrity_description: str = ""
+    availability_description: str = ""
+    authenticity_description: str = ""
+    non_repudiation_description: str = ""
+    assurance_description: str = ""
+    trustworthy_description: str = ""
+    privacy_description: str = ""
+    
+    @classmethod
+    def get_table_name(cls) -> str:
+        return "safety_security_controls"
+
+
 class EntityRepository:
     """
     Repository pattern implementation for database entities.
@@ -646,6 +739,87 @@ class EntityRepository:
             
         except Exception as e:
             logger.error(f"Failed to list {self.entity_class.__name__} by system {system_id}: {str(e)}")
+            return []
+    
+    def find_by_system_hierarchy(self, system_hierarchy: str, baseline: str = WORKING_BASELINE) -> List[BaseEntity]:
+        """
+        Find all entities with a specific system hierarchy.
+        
+        Args:
+            system_hierarchy: The system hierarchy to filter by
+            baseline: The baseline to filter by
+        
+        Returns:
+            List of entities matching the system hierarchy
+        """
+        try:
+            sql = f"SELECT * FROM {self.table_name} WHERE system_hierarchy = ? AND baseline = ? ORDER BY id"
+            rows = self.connection.fetchall(sql, (system_hierarchy, baseline))
+            
+            return [self._row_to_entity(row) for row in rows]
+            
+        except Exception as e:
+            logger.error(f"Failed to find {self.entity_class.__name__} by system hierarchy {system_hierarchy}: {str(e)}")
+            return []
+    
+    def find_by_system_id(self, system_id: int, baseline: str = WORKING_BASELINE) -> List[BaseEntity]:
+        """
+        Find all entities associated with a specific system ID.
+        
+        Args:
+            system_id: The system ID to filter by
+            baseline: The baseline to filter by
+        
+        Returns:
+            List of entities associated with the system
+        """
+        try:
+            # Check if this entity type has a system_id field
+            sql = f"PRAGMA table_info({self.table_name})"
+            columns = [row[1] for row in self.connection.fetchall(sql)]
+            
+            if 'system_id' not in columns:
+                logger.warning(f"Entity {self.entity_class.__name__} does not have system_id field")
+                return []
+            
+            sql = f"SELECT * FROM {self.table_name} WHERE system_id = ? AND baseline = ? ORDER BY id"
+            rows = self.connection.fetchall(sql, (system_id, baseline))
+            
+            return [self._row_to_entity(row) for row in rows]
+        except Exception as e:
+            logger.error(f"Failed to find {self.entity_class.__name__} by system ID {system_id}: {str(e)}")
+            return []
+    
+    def get_by_id(self, entity_id: int, baseline: str = WORKING_BASELINE) -> Optional[BaseEntity]:
+        """
+        Get entity by ID (alias for read method for consistency).
+        
+        Args:
+            entity_id: The entity ID
+            baseline: The baseline to filter by
+        
+        Returns:
+            Entity instance or None if not found
+        """
+        return self.read(entity_id, baseline)
+    
+    def list(self, baseline: str = WORKING_BASELINE) -> List[BaseEntity]:
+        """
+        List all entities of this type.
+        
+        Args:
+            baseline: Baseline to read from
+            
+        Returns:
+            List of all entities
+        """
+        try:
+            sql = f"SELECT * FROM {self.table_name} WHERE baseline = ? ORDER BY id"
+            rows = self.connection.fetchall(sql, (baseline,))
+            
+            return [self._row_to_entity(row) for row in rows]
+        except Exception as e:
+            logger.error(f"Failed to list all {self.entity_class.__name__}: {str(e)}")
             return []
     
     def _row_to_entity(self, row) -> BaseEntity:
