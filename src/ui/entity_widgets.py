@@ -252,6 +252,73 @@ class InterfaceWidget(BaseEntityWidget):
         self.save_btn.setEnabled(enabled)
         self.cancel_btn.setEnabled(enabled)
 
+    def add_entity(self):
+        """Add a new interface."""
+        try:
+            # Clear details and set editing mode
+            self._clear_details()
+            self._set_editing_mode(True)
+            
+            # Set current system as selected if available
+            if self.current_system_id is not None:
+                # Find the current system in the combo box
+                for i in range(self.system_combo.count()):
+                    if self.system_combo.itemData(i) == self.current_system_id:
+                        self.system_combo.setCurrentIndex(i)
+                        break
+            
+            # Generate placeholder hierarchical ID
+            if self.current_system_id is not None:
+                # Get system hierarchy for ID generation
+                db_manager = self.database_initializer.get_database_manager()
+                connection = db_manager.get_connection()
+                
+                system_data = connection.fetchone(
+                    "SELECT system_hierarchy FROM systems WHERE id = ?",
+                    (self.current_system_id,)
+                )
+                
+                if system_data:
+                    system_hierarchy = system_data['system_hierarchy']
+                    # Generate interface ID based on system hierarchy
+                    self.hierarchy_edit.setText(f"{system_hierarchy}.I-?")
+                else:
+                    self.hierarchy_edit.setText("I-?")
+            else:
+                self.hierarchy_edit.setText("I-?")
+            
+            # Reset change tracker
+            self.change_tracker.set_original_data({})
+            
+            logger.debug("Started adding new interface")
+            
+        except Exception as e:
+            logger.error(f"Failed to start adding interface: {str(e)}")
+            self._show_error("Add Failed", f"Failed to start adding interface:\n{str(e)}")
+    
+    def _collect_form_data(self) -> Dict[str, Any]:
+        """Collect data from form fields."""
+        data = {
+            'type_identifier': 'I',
+            'level_identifier': 0,
+            'sequential_identifier': 1,
+            'system_hierarchy': self.hierarchy_edit.text().strip(),
+            'interface_name': self.name_edit.text().strip(),
+            'interface_description': self.description_edit.toPlainText().strip(),
+            'system_id': self.system_combo.currentData(),
+            'baseline': WORKING_BASELINE
+        }
+        
+        # Add critical attributes
+        critical_values = self.critical_attrs.get_values()
+        data.update(critical_values)
+        
+        # Set system_id to current system if not specified
+        if data['system_id'] is None and self.current_system_id is not None:
+            data['system_id'] = self.current_system_id
+        
+        return data
+
 
 class AssetWidget(BaseEntityWidget):
     """
@@ -471,13 +538,80 @@ class AssetWidget(BaseEntityWidget):
     
     def _set_editing_mode(self, enabled: bool):
         """Enable/disable editing mode."""
-        self.hierarchy_edit.setEnabled(enabled and self.current_entity is None)  # Only enable for new entities
+        self.hierarchy_edit.setEnabled(enabled and self.current_entity is None)
         self.name_edit.setEnabled(enabled)
         self.description_edit.setEnabled(enabled)
         self.system_combo.setEnabled(enabled)
         
         self.save_btn.setEnabled(enabled)
         self.cancel_btn.setEnabled(enabled)
+    
+    def add_entity(self):
+        """Add a new asset."""
+        try:
+            # Clear details and set editing mode
+            self._clear_details()
+            self._set_editing_mode(True)
+            
+            # Set current system as selected if available
+            if self.current_system_id is not None:
+                # Find the current system in the combo box
+                for i in range(self.system_combo.count()):
+                    if self.system_combo.itemData(i) == self.current_system_id:
+                        self.system_combo.setCurrentIndex(i)
+                        break
+            
+            # Generate placeholder hierarchical ID
+            if self.current_system_id is not None:
+                # Get system hierarchy for ID generation
+                db_manager = self.database_initializer.get_database_manager()
+                connection = db_manager.get_connection()
+                
+                system_data = connection.fetchone(
+                    "SELECT system_hierarchy FROM systems WHERE id = ?",
+                    (self.current_system_id,)
+                )
+                
+                if system_data:
+                    system_hierarchy = system_data['system_hierarchy']
+                    # Generate asset ID based on system hierarchy
+                    self.hierarchy_edit.setText(f"{system_hierarchy}.A-?")
+                else:
+                    self.hierarchy_edit.setText("A-?")
+            else:
+                self.hierarchy_edit.setText("A-?")
+            
+            # Reset change tracker
+            self.change_tracker.set_original_data({})
+            
+            logger.debug("Started adding new asset")
+            
+        except Exception as e:
+            logger.error(f"Failed to start adding asset: {str(e)}")
+            self._show_error("Add Failed", f"Failed to start adding asset:\n{str(e)}")
+    
+    def _collect_form_data(self) -> Dict[str, Any]:
+        """Collect data from form fields."""
+        data = {
+            'type_identifier': 'A',
+            'level_identifier': 0,
+            'sequential_identifier': 1,
+            'system_hierarchy': self.hierarchy_edit.text().strip(),
+            'asset_name': self.name_edit.text().strip(),
+            'asset_description': self.description_edit.toPlainText().strip(),
+            'system_id': self.system_combo.currentData(),
+            'baseline': WORKING_BASELINE
+        }
+        
+        # Add critical attributes
+        critical_values = self.critical_attrs.get_values()
+        data.update(critical_values)
+        
+        # Set system_id to current system if not specified
+        if data['system_id'] is None and self.current_system_id is not None:
+            data['system_id'] = self.current_system_id
+        
+        return data
 
 
 class HazardWidget(BaseEntityWidget):
@@ -752,15 +886,81 @@ class HazardWidget(BaseEntityWidget):
         self.asset_combo.setCurrentIndex(0)
     
     def _set_editing_mode(self, enabled: bool):
-        """Enable/disable editing mode."""
-        self.hierarchy_edit.setEnabled(enabled and self.current_entity is None)
+        """Set editing mode."""
         self.name_edit.setEnabled(enabled)
         self.description_edit.setEnabled(enabled)
         self.system_combo.setEnabled(enabled)
         self.asset_combo.setEnabled(enabled)
-        
+        self.critical_attrs.setEnabled(enabled)
         self.save_btn.setEnabled(enabled)
         self.cancel_btn.setEnabled(enabled)
+    
+    def add_entity(self):
+        """Add a new hazard."""
+        try:
+            # Clear details and set editing mode
+            self._clear_details()
+            self._set_editing_mode(True)
+            
+            # Set current system as selected if available
+            if self.current_system_id is not None:
+                # Find the current system in the combo box
+                for i in range(self.system_combo.count()):
+                    if self.system_combo.itemData(i) == self.current_system_id:
+                        self.system_combo.setCurrentIndex(i)
+                        break
+                
+                # Load assets for the current system
+                self._load_assets(self.current_system_id)
+            
+            # Generate placeholder hierarchical ID
+            if self.current_system_id is not None:
+                # Get system hierarchy for ID generation
+                db_manager = self.database_initializer.get_database_manager()
+                connection = db_manager.get_connection()
+                
+                system_data = connection.fetchone(
+                    "SELECT system_hierarchy FROM systems WHERE id = ?",
+                    (self.current_system_id,)
+                )
+                
+                if system_data:
+                    system_hierarchy = system_data['system_hierarchy']
+                    # Generate hazard ID based on system hierarchy
+                    self.hierarchy_edit.setText(f"{system_hierarchy}.H-?")
+                else:
+                    self.hierarchy_edit.setText("H-?")
+            else:
+                self.hierarchy_edit.setText("H-?")
+            
+            # Reset change tracker
+            self.change_tracker.set_original_data({})
+            
+            logger.debug("Started adding new hazard")
+            
+        except Exception as e:
+            logger.error(f"Failed to start adding hazard: {str(e)}")
+            self._show_error("Add Failed", f"Failed to start adding hazard:\n{str(e)}")
+    
+    def _collect_form_data(self) -> Dict[str, Any]:
+        """Collect data from form fields."""
+        data = {
+            'type_identifier': 'H',
+            'level_identifier': 0,
+            'sequential_identifier': 1,
+            'system_hierarchy': self.hierarchy_edit.text().strip(),
+            'h_name': self.name_edit.text().strip(),
+            'h_description': self.description_edit.toPlainText().strip(),
+            'system_id': self.system_combo.currentData(),
+            'asset_id': self.asset_combo.currentData(),
+            'baseline': WORKING_BASELINE
+        }
+        
+        # Add critical attributes
+        critical_values = self.critical_attrs.get_values()
+        data.update(critical_values)
+        
+        return data
 
 
 class LossWidget(BaseEntityWidget):
@@ -967,14 +1167,85 @@ class LossWidget(BaseEntityWidget):
         self.system_combo.setCurrentIndex(0)
     
     def _set_editing_mode(self, enabled: bool):
-        """Enable/disable editing mode."""
-        self.hierarchy_edit.setEnabled(enabled and self.current_entity is None)
+        """Set editing mode."""
         self.name_edit.setEnabled(enabled)
         self.description_edit.setEnabled(enabled)
         self.system_combo.setEnabled(enabled)
-        
+        self.critical_attrs.setEnabled(enabled)
         self.save_btn.setEnabled(enabled)
         self.cancel_btn.setEnabled(enabled)
+    
+    def add_entity(self):
+        """Add a new loss."""
+        try:
+            # Clear details and set editing mode
+            self._clear_details()
+            self._set_editing_mode(True)
+            
+            # Set current system as selected if available
+            if self.current_system_id is not None:
+                # Find the current system in the combo box
+                for i in range(self.system_combo.count()):
+                    if self.system_combo.itemData(i) == self.current_system_id:
+                        self.system_combo.setCurrentIndex(i)
+                        break
+                
+                # Load assets for the current system
+                self._load_assets(self.current_system_id)
+            
+            # Generate placeholder hierarchical ID
+            if self.current_system_id is not None:
+                # Get system hierarchy for ID generation
+                db_manager = self.database_initializer.get_database_manager()
+                connection = db_manager.get_connection()
+                
+                system_data = connection.fetchone(
+                    "SELECT system_hierarchy FROM systems WHERE id = ?",
+                    (self.current_system_id,)
+                )
+                
+                if system_data:
+                    system_hierarchy = system_data['system_hierarchy']
+                    # Generate loss ID based on system hierarchy
+                    self.hierarchy_edit.setText(f"{system_hierarchy}.L-?")
+                else:
+                    self.hierarchy_edit.setText("L-?")
+            else:
+                self.hierarchy_edit.setText("L-?")
+            
+            # Reset change tracker
+            self.change_tracker.set_original_data({})
+            
+            logger.debug("Started adding new loss")
+            
+        except Exception as e:
+            logger.error(f"Failed to start adding loss: {str(e)}")
+            self._show_error("Add Failed", f"Failed to start adding loss:\n{str(e)}")
+    
+    def _collect_form_data(self) -> Dict[str, Any]:
+        """Collect data from form fields."""
+        data = {
+            'type_identifier': 'L',
+            'level_identifier': 0,
+            'sequential_identifier': 1,
+            'system_hierarchy': self.hierarchy_edit.text().strip(),
+            'l_name': self.name_edit.text().strip(),
+            'l_description': self.description_edit.toPlainText().strip(),
+            'loss_description': self.loss_description_edit.toPlainText().strip(),
+            'system_id': self.system_combo.currentData(),
+            'asset_id': self.asset_combo.currentData(),
+            'baseline': WORKING_BASELINE
+        }
+        
+        # Add critical attributes
+        critical_values = self.critical_attrs.get_values()
+        data.update(critical_values)
+        
+        # Set system_id to current system if not specified
+        if data['system_id'] is None and self.current_system_id is not None:
+            data['system_id'] = self.current_system_id
+        
+        return data
 
 
 class ControlStructureWidget(BaseEntityWidget):
@@ -1196,14 +1467,75 @@ class ControlStructureWidget(BaseEntityWidget):
     
     def _set_editing_mode(self, enabled: bool):
         """Enable/disable editing mode."""
-        self.hierarchy_edit.setEnabled(enabled and self.current_entity is None)
         self.name_edit.setEnabled(enabled)
         self.description_edit.setEnabled(enabled)
-        self.diagram_url_edit.setEnabled(enabled)
         self.system_combo.setEnabled(enabled)
-        
+        self.critical_attrs.setEnabled(enabled)
         self.save_btn.setEnabled(enabled)
         self.cancel_btn.setEnabled(enabled)
+    
+    def add_entity(self):
+        """Add a new control structure."""
+        try:
+            # Clear details and set editing mode
+            self._clear_details()
+            self._set_editing_mode(True)
+            
+            # Set current system as selected if available
+            if self.current_system_id is not None:
+                # Find the current system in the combo box
+                for i in range(self.system_combo.count()):
+                    if self.system_combo.itemData(i) == self.current_system_id:
+                        self.system_combo.setCurrentIndex(i)
+                        break
+            
+            # Generate placeholder hierarchical ID
+            if self.current_system_id is not None:
+                # Get system hierarchy for ID generation
+                db_manager = self.database_initializer.get_database_manager()
+                connection = db_manager.get_connection()
+                
+                system_data = connection.fetchone(
+                    "SELECT system_hierarchy FROM systems WHERE id = ?",
+                    (self.current_system_id,)
+                )
+                
+                if system_data:
+                    system_hierarchy = system_data['system_hierarchy']
+                    # Generate control structure ID based on system hierarchy
+                    self.hierarchy_edit.setText(f"{system_hierarchy}.CS-?")
+                else:
+                    self.hierarchy_edit.setText("CS-?")
+            else:
+                self.hierarchy_edit.setText("CS-?")
+            
+            # Reset change tracker
+            self.change_tracker.set_original_data({})
+            
+            logger.debug("Started adding new control structure")
+            
+        except Exception as e:
+            logger.error(f"Failed to start adding control structure: {str(e)}")
+            self._show_error("Add Failed", f"Failed to start adding control structure:\n{str(e)}")
+    
+    def _collect_form_data(self) -> Dict[str, Any]:
+        """Collect data from form fields."""
+        data = {
+            'type_identifier': 'CS',
+            'level_identifier': 0,
+            'sequential_identifier': 1,
+            'system_hierarchy': self.hierarchy_edit.text().strip(),
+            'structure_name': self.name_edit.text().strip(),
+            'structure_description': self.description_edit.toPlainText().strip(),
+            'system_id': self.system_combo.currentData(),
+            'baseline': WORKING_BASELINE
+        }
+        
+        # Add critical attributes
+        critical_values = self.critical_attrs.get_values()
+        data.update(critical_values)
+        
+        return data
 
 
 class ControllerWidget(BaseEntityWidget):
@@ -1238,6 +1570,12 @@ class ControllerWidget(BaseEntityWidget):
         )
         
         self.validator.add_rule(
+            "controller_name",
+            lambda x: len(x) <= 100 if x else True,
+            "Controller name must be 100 characters or less"
+        )
+        
+        self.validator.add_rule(
             "system_id",
             lambda x: x and x > 0,
             "Valid system must be selected"
@@ -1267,6 +1605,10 @@ class ControllerWidget(BaseEntityWidget):
         self.hierarchy_edit.setPlaceholderText("C-1, C-1.1, etc.")
         basic_layout.addRow("Hierarchical ID:", self.hierarchy_edit)
         
+        self.short_id_edit = QLineEdit()
+        self.short_id_edit.setPlaceholderText("Short text identifier...")
+        basic_layout.addRow("Short ID:", self.short_id_edit)
+        
         self.name_edit = QLineEdit()
         self.name_edit.setPlaceholderText("Enter controller name...")
         basic_layout.addRow("Controller Name*:", self.name_edit)
@@ -1280,11 +1622,6 @@ class ControllerWidget(BaseEntityWidget):
         self.system_combo = QComboBox()
         self._load_systems()
         basic_layout.addRow("Associated System*:", self.system_combo)
-        
-        # Short Text Identifier
-        self.short_text_edit = QLineEdit()
-        self.short_text_edit.setPlaceholderText("Enter short identifier...")
-        basic_layout.addRow("Short Identifier:", self.short_text_edit)
         
         scroll_layout.addWidget(basic_group)
         
@@ -1374,53 +1711,88 @@ class ControllerWidget(BaseEntityWidget):
     def _populate_details(self, entity: Controller):
         """Populate details widget with controller data."""
         self.hierarchy_edit.setText(entity.get_hierarchical_id())
+        self.short_id_edit.setText(entity.short_text_identifier or "")
         self.name_edit.setText(entity.controller_name)
         self.description_edit.setPlainText(entity.controller_description or "")
-        self.short_text_edit.setText(entity.short_text_identifier or "")
         
-        # Set system selection
+        # Set system in combo box
         for i in range(self.system_combo.count()):
             if self.system_combo.itemData(i) == entity.system_id:
                 self.system_combo.setCurrentIndex(i)
                 break
-        
-        self.change_tracker.set_original_data(self._collect_form_data())
     
     def _collect_form_data(self) -> Dict[str, Any]:
         """Collect data from form fields."""
-        # Parse hierarchical ID
-        hierarchy_text = self.hierarchy_edit.text().strip()
-        parsed_id = HierarchyManager.parse_hierarchical_id(hierarchy_text)
-        
         data = {
-            "type_identifier": parsed_id.type_identifier if parsed_id else "C",
-            "level_identifier": parsed_id.level_identifier if parsed_id else 0,
-            "sequential_identifier": parsed_id.sequential_identifier if parsed_id else 1,
-            "system_hierarchy": hierarchy_text,
-            "system_id": self.system_combo.currentData(),
-            "controller_name": self.name_edit.text().strip(),
-            "controller_description": self.description_edit.toPlainText().strip(),
-            "short_text_identifier": self.short_text_edit.text().strip(),
-            "baseline": WORKING_BASELINE
+            'type_identifier': 'C',
+            'level_identifier': 0,
+            'sequential_identifier': 1,
+            'system_hierarchy': self.hierarchy_edit.text().strip(),
+            'short_text_identifier': self.short_id_edit.text().strip(),
+            'controller_name': self.name_edit.text().strip(),
+            'controller_description': self.description_edit.toPlainText().strip(),
+            'system_id': self.system_combo.currentData(),
+            'baseline': WORKING_BASELINE
         }
         
         return data
     
     def _clear_details(self):
-        """Clear details form."""
-        self.hierarchy_edit.setText("C-1")
+        """Clear details widget."""
+        self.hierarchy_edit.clear()
+        self.short_id_edit.clear()
         self.name_edit.clear()
         self.description_edit.clear()
-        self.short_text_edit.clear()
         self.system_combo.setCurrentIndex(0)
     
     def _set_editing_mode(self, enabled: bool):
-        """Enable/disable editing mode."""
-        self.hierarchy_edit.setEnabled(enabled and self.current_entity is None)
+        """Set editing mode."""
         self.name_edit.setEnabled(enabled)
         self.description_edit.setEnabled(enabled)
-        self.short_text_edit.setEnabled(enabled)
         self.system_combo.setEnabled(enabled)
-        
         self.save_btn.setEnabled(enabled)
         self.cancel_btn.setEnabled(enabled)
+    
+    def add_entity(self):
+        """Add a new controller."""
+        try:
+            # Clear details and set editing mode
+            self._clear_details()
+            self._set_editing_mode(True)
+            
+            # Set current system as selected if available
+            if self.current_system_id is not None:
+                # Find the current system in the combo box
+                for i in range(self.system_combo.count()):
+                    if self.system_combo.itemData(i) == self.current_system_id:
+                        self.system_combo.setCurrentIndex(i)
+                        break
+            
+            # Generate placeholder hierarchical ID
+            if self.current_system_id is not None:
+                # Get system hierarchy for ID generation
+                db_manager = self.database_initializer.get_database_manager()
+                connection = db_manager.get_connection()
+                
+                system_data = connection.fetchone(
+                    "SELECT system_hierarchy FROM systems WHERE id = ?",
+                    (self.current_system_id,)
+                )
+                
+                if system_data:
+                    system_hierarchy = system_data['system_hierarchy']
+                    # Generate controller ID based on system hierarchy
+                    self.hierarchy_edit.setText(f"{system_hierarchy}.C-?")
+                else:
+                    self.hierarchy_edit.setText("C-?")
+            else:
+                self.hierarchy_edit.setText("C-?")
+            
+            # Reset change tracker
+            self.change_tracker.set_original_data({})
+            
+            logger.debug("Started adding new controller")
+            
+        except Exception as e:
+            logger.error(f"Failed to start adding controller: {str(e)}")
+            self._show_error("Add Failed", f"Failed to start adding controller:\n{str(e)}")

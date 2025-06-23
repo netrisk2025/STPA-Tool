@@ -173,14 +173,25 @@ class HierarchyManager:
             Child hierarchical ID or None if invalid
         """
         try:
-            # For root level parent (level 0), child becomes level 1
-            if parent_id.level_identifier == 0:
-                child_level = parent_id.sequential_identifier
-                child_seq = child_sequence
+            # For systems, we extend the hierarchy path
+            if parent_id.type_identifier == SYSTEM_TYPE:
+                # If parent is root level (S-1), child becomes S-1.1, S-1.2, etc.
+                if parent_id.level_identifier == 0:
+                    child_level = parent_id.sequential_identifier
+                    child_seq = child_sequence
+                else:
+                    # For nested levels, extend the hierarchy
+                    # Parent S-1.2 becomes child S-1.2.1, S-1.2.2, etc.
+                    child_level = parent_id.level_identifier
+                    child_seq = child_sequence
             else:
-                # For nested levels, extend the hierarchy
-                child_level = parent_id.level_identifier
-                child_seq = child_sequence
+                # For other entity types, use simpler logic
+                if parent_id.level_identifier == 0:
+                    child_level = parent_id.sequential_identifier
+                    child_seq = child_sequence
+                else:
+                    child_level = parent_id.level_identifier
+                    child_seq = child_sequence
             
             child_id = HierarchicalID(
                 type_identifier=parent_id.type_identifier,

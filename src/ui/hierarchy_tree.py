@@ -5,7 +5,7 @@ Provides interactive system hierarchy navigation with database integration.
 
 from typing import Optional, Dict, List, Any
 from PySide6.QtWidgets import (
-    QTreeWidget, QTreeWidgetItem, QMenu, QMessageBox, QHeaderView
+    QTreeWidget, QTreeWidgetItem, QMenu, QMessageBox, QHeaderView, QDialog
 )
 from PySide6.QtCore import Qt, Signal, QTimer
 from PySide6.QtGui import QAction, QIcon
@@ -275,18 +275,141 @@ class HierarchyTreeWidget(QTreeWidget):
     
     def _edit_system(self, item: SystemTreeItem):
         """Edit system."""
-        # TODO: Open system editor dialog
-        logger.info(f"Edit system requested: {item.get_system().system_name}")
+        try:
+            from .entity_dialogs import SystemEditDialog
+            
+            dialog = SystemEditDialog(system=item.get_system(), parent=self)
+            if dialog.exec() == QDialog.Accepted:
+                updated_system = dialog.get_system()
+                if updated_system:
+                    # Update in database
+                    db_manager = self.database_initializer.get_database_manager()
+                    connection = db_manager.get_connection()
+                    system_repo = EntityFactory.get_repository(connection, System)
+                    
+                    if system_repo.update(updated_system):
+                        # Update tree item
+                        item.update_system(updated_system)
+                        logger.info(f"Updated system: {updated_system.system_name}")
+                        self.system_changed.emit(updated_system.id)
+                    else:
+                        self._show_error("Update Failed", "Failed to update system in database")
+                        
+        except Exception as e:
+            logger.error(f"Failed to edit system: {str(e)}")
+            self._show_error("Edit Failed", str(e))
     
     def _add_child_system(self, parent_item: SystemTreeItem):
         """Add child system."""
-        # TODO: Open new system dialog with parent set
-        logger.info(f"Add child system requested for: {parent_item.get_system().system_name}")
+        try:
+            from .entity_dialogs import SystemEditDialog
+            
+            parent_system = parent_item.get_system()
+            dialog = SystemEditDialog(parent_system=parent_system, parent=self)
+            
+            if dialog.exec() == QDialog.Accepted:
+                new_system = dialog.get_system()
+                if new_system:
+                    # The dialog should have already set parent_system_id and hierarchical ID
+                    # Only override if the hierarchical ID is still a placeholder
+                    if "?" in new_system.system_hierarchy:
+                        # Generate hierarchical ID for child
+                        from ..utils.hierarchy import HierarchyManager
+                        parent_hierarchy = HierarchyManager.parse_hierarchical_id(parent_system.system_hierarchy)
+                        if parent_hierarchy:
+                            # Find next sequential ID for this level
+                            db_manager = self.database_initializer.get_database_manager()
+                            connection = db_manager.get_connection()
+                            
+                            # Get existing child systems of this parent
+                            existing_children = connection.fetchall(
+                                "SELECT system_hierarchy FROM systems WHERE parent_system_id = ? AND baseline = ?",
+                                (parent_system.id, "Working")
+                            )
+                            
+                            next_seq = len(existing_children) + 1
+                            child_hierarchy = HierarchyManager.generate_child_id(parent_hierarchy, next_seq)
+                            
+                            if child_hierarchy:
+                                new_system.system_hierarchy = str(child_hierarchy)
+                                new_system.type_identifier = child_hierarchy.type_identifier
+                                new_system.level_identifier = child_hierarchy.level_identifier
+                                new_system.sequential_identifier = child_hierarchy.sequential_identifier
+                    
+                    # Save to database
+                    db_manager = self.database_initializer.get_database_manager()
+                    connection = db_manager.get_connection()
+                    system_repo = EntityFactory.get_repository(connection, System)
+                    new_id = system_repo.create(new_system)
+                    
+                    if new_id:
+                        new_system.id = new_id
+                        # Add to tree
+                        self.add_system(new_system)
+                        logger.info(f"Added child system: {new_system.system_name}")
+                        self.system_changed.emit(new_id)
+                    else:
+                        self._show_error("Create Failed", "Failed to create system in database")
+                        
+        except Exception as e:
+            logger.error(f"Failed to add child system: {str(e)}")
+            self._show_error("Add Failed", str(e))
     
     def _add_root_system(self):
         """Add root system."""
-        # TODO: Open new system dialog
-        logger.info("Add root system requested")
+        try:
+            from .entity_dialogs import SystemEditDialog
+            
+            dialog = SystemEditDialog(parent=self)
+            
+            if dialog.exec() == QDialog.Accepted:
+                new_system = dialog.get_system()
+                if new_system:
+                    # Only override if the hierarchical ID is still a placeholder
+                    if "?" in new_system.system_hierarchy:
+                        # Generate hierarchical ID for root system
+                        from ..utils.hierarchy import HierarchyManager
+                        
+                        db_manager = self.database_initializer.get_database_manager()
+                        connection = db_manager.get_connection()
+                        
+                        # Get existing root systems
+                        existing_roots = connection.fetchall(
+                            "SELECT system_hierarchy FROM systems WHERE parent_system_id IS NULL AND baseline = ?",
+                            ("Working",)
+                        )
+                        
+                        next_seq = len(existing_roots) + 1
+                        root_hierarchy = HierarchyManager.HierarchicalID(
+                            type_identifier="S",
+                            level_identifier=0,
+                            sequential_identifier=next_seq
+                        )
+                        
+                        new_system.system_hierarchy = str(root_hierarchy)
+                        new_system.type_identifier = root_hierarchy.type_identifier
+                        new_system.level_identifier = root_hierarchy.level_identifier
+                        new_system.sequential_identifier = root_hierarchy.sequential_identifier
+                        new_system.parent_system_id = None
+                    
+                    # Save to database
+                    db_manager = self.database_initializer.get_database_manager()
+                    connection = db_manager.get_connection()
+                    system_repo = EntityFactory.get_repository(connection, System)
+                    new_id = system_repo.create(new_system)
+                    
+                    if new_id:
+                        new_system.id = new_id
+                        # Add to tree
+                        self.add_system(new_system)
+                        logger.info(f"Added root system: {new_system.system_name}")
+                        self.system_changed.emit(new_id)
+                    else:
+                        self._show_error("Create Failed", "Failed to create system in database")
+                        
+        except Exception as e:
+            logger.error(f"Failed to add root system: {str(e)}")
+            self._show_error("Add Failed", str(e))
     
     def _delete_system(self, item: SystemTreeItem):
         """Delete system with confirmation."""

@@ -146,6 +146,7 @@ class BaseEntityWidget(QWidget):
         self.database_initializer = database_initializer
         self.current_entity: Optional[BaseEntity] = None
         self.selected_entity_id: Optional[int] = None
+        self.current_system_id: Optional[int] = None  # Track current system for filtering
         
         # Framework components
         self.validator = EntityValidator()
@@ -256,35 +257,41 @@ class BaseEntityWidget(QWidget):
         
         layout.addWidget(splitter)
     
+    def set_current_system_id(self, system_id: Optional[int]):
+        """Set the current system ID for filtering entities."""
+        self.current_system_id = system_id
+        logger.debug(f"Set current system ID to {system_id} for {self.entity_class.__name__} widget")
+    
     def _load_entities(self):
-        """Load entities from database into table."""
+        """Load entities from database."""
         try:
+            if not self.database_initializer:
+                logger.warning("No database initializer available")
+                return
+            
             db_manager = self.database_initializer.get_database_manager()
             connection = db_manager.get_connection()
+            entity_repo = EntityFactory.get_repository(connection, self.entity_class)
             
-            # Get table name from entity class
-            table_name = self._get_table_name()
+            # Load entities, filtered by system if specified
+            if self.current_system_id is not None:
+                entities = entity_repo.find_by_system_id(self.current_system_id)
+                logger.debug(f"Loaded {len(entities)} {self.entity_class.__name__} entities for system {self.current_system_id}")
+            else:
+                entities = entity_repo.list()
+                logger.debug(f"Loaded {len(entities)} {self.entity_class.__name__} entities (all systems)")
             
-            # Load all entities for current baseline
-            entities_data = connection.fetchall(
-                f"SELECT * FROM {table_name} WHERE baseline = ? ORDER BY id",
-                ("Working",)
-            )
-            
-            # Convert to entity objects
-            entities = []
-            for row in entities_data:
-                row_dict = dict(row)
-                entity = self.entity_class(**row_dict)
-                entities.append(entity)
-            
+            # Populate table
             self._populate_table(entities)
             
-            logger.debug(f"Loaded {len(entities)} {self.entity_class.__name__} entities")
+            # Clear selection
+            self.selected_entity_id = None
+            self.current_entity = None
+            self._clear_details()
             
         except Exception as e:
             logger.error(f"Failed to load {self.entity_class.__name__} entities: {str(e)}")
-            self._show_error("Load Failed", f"Failed to load entities: {str(e)}")
+            self._show_error("Load Failed", f"Failed to load {self.entity_class.__name__} entities:\n{str(e)}")
     
     def _get_table_name(self) -> str:
         """Get database table name from entity class."""

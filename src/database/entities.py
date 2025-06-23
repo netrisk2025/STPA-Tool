@@ -57,6 +57,11 @@ class BaseEntity(ABC):
         Returns:
             Formatted hierarchical ID (e.g., "S-1.2.1")
         """
+        # Use the auto-generated system_hierarchy if available
+        if self.system_hierarchy:
+            return self.system_hierarchy
+        
+        # Fallback to the old method if system_hierarchy is not set
         if self.level_identifier == 0:
             return f"{self.type_identifier}-{self.sequential_identifier}"
         else:
@@ -91,6 +96,7 @@ class System(BaseEntity):
     system_name: str = ""
     system_description: str = ""
     parent_system_id: Optional[int] = None
+    type_identifier: str = "S"
     
     # Critical attributes
     criticality: str = CRITICALITY_NON_CRITICAL
@@ -123,6 +129,7 @@ class Function(BaseEntity):
     short_text_identifier: str = ""
     function_name: str = ""
     function_description: str = ""
+    type_identifier: str = "F"
     
     # Critical attributes  
     criticality: str = CRITICALITY_NON_CRITICAL
@@ -154,6 +161,7 @@ class Interface(BaseEntity):
     system_id: int = 0
     interface_name: str = ""
     interface_description: str = ""
+    type_identifier: str = "I"
     
     # Critical attributes
     criticality: str = CRITICALITY_NON_CRITICAL
@@ -185,6 +193,7 @@ class Asset(BaseEntity):
     system_id: int = 0
     asset_name: str = ""
     asset_description: str = ""
+    type_identifier: str = "A"
     
     # Critical attributes
     criticality: str = CRITICALITY_NON_CRITICAL
@@ -223,6 +232,7 @@ class Requirement(BaseEntity):
     imperative: str = IMPERATIVE_SHALL
     actor: str = ""
     action: str = ""
+    type_identifier: str = "R"
     
     # Critical attributes
     criticality: str = CRITICALITY_NON_CRITICAL
@@ -251,11 +261,10 @@ class Requirement(BaseEntity):
 @dataclass
 class Hazard(BaseEntity):
     """Hazard entity representing a system hazard."""
-    system_id: Optional[int] = None
     environment_id: Optional[int] = None
-    asset_id: Optional[int] = None
     h_name: str = ""
     h_description: str = ""
+    type_identifier: str = "H"
     
     # Critical attributes
     criticality: str = CRITICALITY_NON_CRITICAL
@@ -304,30 +313,11 @@ class Hazard(BaseEntity):
 @dataclass
 class Loss(BaseEntity):
     """Loss entity representing a system loss."""
-    system_id: int = 0
     asset_id: int = 0
     l_name: str = ""
     l_description: str = ""
     loss_description: str = ""
-    
-    # Critical attributes
-    criticality: str = CRITICALITY_NON_CRITICAL
-    confidentiality: bool = False
-    confidentiality_description: str = ""
-    integrity: bool = False
-    integrity_description: str = ""
-    availability: bool = False
-    availability_description: str = ""
-    authenticity: bool = False
-    authenticity_description: str = ""
-    non_repudiation: bool = False
-    non_repudiation_description: str = ""
-    assurance: bool = False
-    assurance_description: str = ""
-    trustworthy: bool = False
-    trustworthy_description: str = ""
-    privacy: bool = False
-    privacy_description: str = ""
+    type_identifier: str = "L"
     
     @classmethod
     def get_table_name(cls) -> str:
@@ -351,6 +341,7 @@ class ControlStructure(BaseEntity):
     structure_name: str = ""
     structure_description: str = ""
     diagram_url: str = ""
+    type_identifier: str = "CS"
     
     # Critical attributes
     criticality: str = CRITICALITY_NON_CRITICAL
@@ -383,6 +374,7 @@ class Controller(BaseEntity):
     short_text_identifier: str = ""
     controller_name: str = ""
     controller_description: str = ""
+    type_identifier: str = "CT"
     
     @classmethod
     def get_table_name(cls) -> str:
@@ -397,6 +389,7 @@ class ControlledProcess(BaseEntity):
     short_text_identifier: str = ""
     cp_name: str = ""
     cp_description: str = ""
+    type_identifier: str = "CP"
     
     @classmethod
     def get_table_name(cls) -> str:
@@ -411,6 +404,7 @@ class ControlAction(BaseEntity):
     ca_description: str = ""
     unsafe: bool = False
     unsecure: bool = False
+    type_identifier: str = "CA"
     
     # Critical attributes
     criticality: str = CRITICALITY_NON_CRITICAL
@@ -444,6 +438,7 @@ class Feedback(BaseEntity):
     fb_name: str = ""
     fb_description: str = ""
     description: str = ""
+    type_identifier: str = "FB"
     
     # Critical attributes
     criticality: str = CRITICALITY_NON_CRITICAL
@@ -473,6 +468,7 @@ class Feedback(BaseEntity):
 class Constraint(BaseEntity):
     """Database entity for constraints."""
     constraint_name: str = ""
+    type_identifier: str = "C"
     constraint_description: str = ""
     
     @classmethod
@@ -482,11 +478,13 @@ class Constraint(BaseEntity):
 
 @dataclass
 class Environment(BaseEntity):
-    """Database entity for environments."""
+    """Database entity for environments, associated with a system."""
+    system_id: int = 0
     environment_name: str = ""
     environment_description: str = ""
     operational_context: str = ""
     environmental_conditions: str = ""
+    type_identifier: str = "E"
     
     @classmethod
     def get_table_name(cls) -> str:
@@ -499,6 +497,7 @@ class StateDiagram(BaseEntity):
     sd_name: str = ""
     sd_description: str = ""
     diagram_url: str = ""
+    type_identifier: str = "SD"
     
     @classmethod
     def get_table_name(cls) -> str:
@@ -515,6 +514,7 @@ class State(BaseEntity):
     integrity: bool = False
     availability: bool = False
     authenticity: bool = False
+    type_identifier: str = "ST"
     non_repudiation: bool = False
     assurance: bool = False
     trustworthy: bool = False
@@ -544,6 +544,7 @@ class SafetySecurityControl(BaseEntity):
     integrity: bool = False
     availability: bool = False
     authenticity: bool = False
+    type_identifier: str = "SC"
     non_repudiation: bool = False
     assurance: bool = False
     trustworthy: bool = False
@@ -591,6 +592,10 @@ class EntityRepository:
             ID of created entity or None if failed
         """
         try:
+            # Auto-generate hierarchical ID if not already set
+            if not entity.system_hierarchy:
+                self._generate_hierarchical_id(entity)
+            
             # Prepare field data
             entity_dict = entity.to_dict()
             
@@ -617,7 +622,7 @@ class EntityRepository:
                 # Log audit trail
                 self._log_audit('INSERT', entity_id, entity_dict)
                 
-                logger.debug(f"Created {self.entity_class.__name__} with ID {entity_id}")
+                logger.debug(f"Created {self.entity_class.__name__} with ID {entity_id} and hierarchical ID {entity.system_hierarchy}")
                 return entity_id
                 
         except Exception as e:
@@ -845,6 +850,125 @@ class EntityRepository:
         
         # Create entity instance
         return self.entity_class(**row_dict)
+    
+    def _generate_hierarchical_id(self, entity: BaseEntity):
+        """
+        Generate hierarchical ID for entity.
+        
+        Args:
+            entity: Entity to generate hierarchical ID for
+        """
+        try:
+            from ..utils.hierarchy import HierarchyManager
+            
+            # Get existing hierarchical IDs for this entity type and baseline
+            existing_ids_sql = f"""
+            SELECT system_hierarchy FROM {self.table_name} 
+            WHERE baseline = ? AND system_hierarchy != ''
+            """
+            rows = self.connection.fetchall(existing_ids_sql, (entity.baseline,))
+            existing_ids = [row['system_hierarchy'] for row in rows if row['system_hierarchy']]
+            
+            # For systems, handle parent-child hierarchy
+            if isinstance(entity, System):
+                if entity.parent_system_id:
+                    # Get parent system hierarchy
+                    parent_sql = "SELECT system_hierarchy FROM systems WHERE id = ? AND baseline = ?"
+                    parent_row = self.connection.fetchone(parent_sql, (entity.parent_system_id, entity.baseline))
+                    
+                    if parent_row and parent_row['system_hierarchy']:
+                        parent_hierarchy = parent_row['system_hierarchy']
+                        parent_id = HierarchyManager.parse_hierarchical_id(parent_hierarchy)
+                        
+                        if parent_id:
+                            # Find next sequential number for children of this parent
+                            child_seq = 1
+                            while True:
+                                if parent_id.level_identifier == 0:
+                                    # Parent is root (S-1), child becomes S-1.1, S-1.2, etc.
+                                    child_hierarchy = f"{entity.type_identifier}-{parent_id.sequential_identifier}.{child_seq}"
+                                else:
+                                    # Parent is nested (S-1.2), child becomes S-1.2.1, S-1.2.2, etc.
+                                    child_hierarchy = f"{entity.type_identifier}-{parent_id.level_identifier}.{parent_id.sequential_identifier}.{child_seq}"
+                                
+                                if child_hierarchy not in existing_ids:
+                                    break
+                                child_seq += 1
+                            
+                            entity.system_hierarchy = child_hierarchy
+                            # For systems, set the hierarchical components
+                            if child_hierarchy.count('.') == 1:
+                                # Format: S-1.2
+                                parts = child_hierarchy.split('-')[1].split('.')
+                                entity.level_identifier = int(parts[0])
+                                entity.sequential_identifier = int(parts[1])
+                            else:
+                                # Format: S-1.2.3 (deeper nesting)
+                                parts = child_hierarchy.split('-')[1].split('.')
+                                entity.level_identifier = int(parts[0])
+                                entity.sequential_identifier = int(parts[-1])  # Use last part
+                            return
+                
+                # Root system - find next sequential number
+                seq_id = HierarchyManager.find_next_sequential_id(existing_ids, entity.type_identifier, 0)
+                entity.system_hierarchy = f"{entity.type_identifier}-{seq_id}"
+                entity.level_identifier = 0
+                entity.sequential_identifier = seq_id
+            
+            else:
+                # For non-system entities, use the system hierarchy they belong to
+                if hasattr(entity, 'system_id') and entity.system_id is not None and entity.system_id > 0:
+                    # Get system hierarchy
+                    system_sql = "SELECT system_hierarchy FROM systems WHERE id = ? AND baseline = ?"
+                    system_row = self.connection.fetchone(system_sql, (entity.system_id, entity.baseline))
+                    
+                    if system_row and system_row['system_hierarchy']:
+                        system_hierarchy = system_row['system_hierarchy']
+                        # Extract the hierarchy part after the type identifier (e.g., "1.2" from "S-1.2")
+                        system_hierarchy_part = system_hierarchy.split('-')[1] if '-' in system_hierarchy else system_hierarchy
+                        
+                        # Find next sequential number for this entity type within this system
+                        # Look for existing entities with the same system hierarchy pattern
+                        entity_pattern = f"{entity.type_identifier}-{system_hierarchy_part}."
+                        
+                        # Count existing entities with this pattern
+                        matching_entities = [eid for eid in existing_ids if eid.startswith(entity_pattern)]
+                        seq_id = len(matching_entities) + 1
+                        
+                        # Create hierarchical ID: Type-SystemHierarchy.SequentialNumber
+                        # Example: F-1.2.1 (Function 1 in System S-1.2)
+                        entity.system_hierarchy = f"{entity.type_identifier}-{system_hierarchy_part}.{seq_id}"
+                        
+                        # Set hierarchical components
+                        hierarchy_parts = system_hierarchy_part.split('.')
+                        if len(hierarchy_parts) == 1:
+                            # Simple system hierarchy like "1"
+                            entity.level_identifier = int(hierarchy_parts[0])
+                            entity.sequential_identifier = seq_id
+                        else:
+                            # Complex system hierarchy like "1.2"
+                            entity.level_identifier = int(hierarchy_parts[0])
+                            entity.sequential_identifier = seq_id
+                    else:
+                        # System not found or no hierarchy, create simple sequential ID
+                        seq_id = HierarchyManager.find_next_sequential_id(existing_ids, entity.type_identifier, 0)
+                        entity.system_hierarchy = f"{entity.type_identifier}-{seq_id}"
+                        entity.level_identifier = 0
+                        entity.sequential_identifier = seq_id
+                else:
+                    # Entity not associated with system (like hazards, losses)
+                    seq_id = HierarchyManager.find_next_sequential_id(existing_ids, entity.type_identifier, 0)
+                    entity.system_hierarchy = f"{entity.type_identifier}-{seq_id}"
+                    entity.level_identifier = 0
+                    entity.sequential_identifier = seq_id
+                    
+        except Exception as e:
+            logger.error(f"Failed to generate hierarchical ID: {str(e)}")
+            # Fallback to simple sequential ID
+            seq_id = 1
+            entity.system_hierarchy = f"{entity.type_identifier}-{seq_id}"
+            entity.level_identifier = 0
+            entity.sequential_identifier = seq_id
     
     def _log_audit(self, operation: str, entity_id: int, data: Dict[str, Any]) -> None:
         """

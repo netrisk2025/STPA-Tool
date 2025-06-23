@@ -39,18 +39,27 @@ class UIConfig:
 
 
 @dataclass
+class DiagramsConfig:
+    """Diagrams configuration settings."""
+    output_dir: str = "diagrams"
+
+
+@dataclass
 class AppConfig:
     """Main application configuration."""
     working_directory: Optional[str] = None
     current_baseline: str = WORKING_BASELINE
     database: DatabaseConfig = None
     ui: UIConfig = None
+    diagrams: DiagramsConfig = None
     
     def __post_init__(self):
         if self.database is None:
             self.database = DatabaseConfig()
         if self.ui is None:
             self.ui = UIConfig()
+        if self.diagrams is None:
+            self.diagrams = DiagramsConfig()
 
 
 class ConfigManager:
@@ -236,10 +245,17 @@ class ConfigManager:
             current_soi_id=ui_data.get('current_soi_id')
         )
         
+        # Extract Diagrams config
+        diagrams_data = data.get('diagrams', {})
+        diagrams_config = DiagramsConfig(
+            output_dir=diagrams_data.get('output_dir', "diagrams")
+        )
+        
         # Create main config
         return AppConfig(
             working_directory=data.get('working_directory'),
             current_baseline=data.get('current_baseline', WORKING_BASELINE),
             database=db_config,
-            ui=ui_config
+            ui=ui_config,
+            diagrams=diagrams_config
         )

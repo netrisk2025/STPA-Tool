@@ -8,7 +8,7 @@ from PySide6.QtWidgets import (
     QMainWindow, QVBoxLayout, QHBoxLayout, QWidget, QSplitter,
     QMenuBar, QStatusBar, QToolBar, QLabel, QTreeWidget, QTabWidget,
     QTableWidget, QTableWidgetItem, QPushButton, QHeaderView, QMessageBox,
-    QComboBox
+    QComboBox, QDialog, QGroupBox
 )
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QAction, QIcon
@@ -19,7 +19,11 @@ from ..config.constants import (
 )
 from ..log_config.config import get_logger
 from .hierarchy_tree import HierarchyTreeWidget
-from .entity_dialogs import SystemEditDialog, FunctionEditDialog, RequirementEditDialog
+from .entity_dialogs import (
+    SystemEditDialog, FunctionEditDialog, RequirementEditDialog,
+    InterfaceEditDialog, AssetEditDialog, HazardEditDialog,
+    LossEditDialog, ControlStructureEditDialog, ControllerEditDialog
+)
 from .entity_widgets import (
     InterfaceWidget, AssetWidget, HazardWidget, LossWidget,
     ControlStructureWidget, ControllerWidget
@@ -28,13 +32,14 @@ from .export_dialogs import JsonExportDialog, MarkdownExportDialog, ArchiveExpor
 from .baseline_dialogs import BaselineCreationDialog, BaselineManagementDialog
 from .collaboration_dialogs import BranchCreationDialog, BranchManagementDialog
 from ..database.entities import (
-    System, Function, Requirement, Interface, Asset, Hazard, Loss, 
+    System, Function, Requirement, Interface, Asset, Hazard, Loss,
     ControlStructure, Controller, EntityFactory
 )
-from ..diagrams import DiagramGenerator, DiagramRenderer, DiagramViewer
+from ..diagrams.generator import DiagramGenerator
+from ..diagrams.renderer import DiagramRenderer
+from ..diagrams.viewer import DiagramViewer
 from ..database.baseline_manager import BaselineManager
 from ..collaboration import BranchManager, MergeManager
-from ..diagrams.types import DiagramType
 
 logger = get_logger(__name__)
 
@@ -104,6 +109,52 @@ class MainWindow(QMainWindow):
             self.hierarchy_tree.refresh_from_database()
         except Exception as e:
             logger.error(f"Failed to load initial data: {str(e)}")
+    
+    def _setup_diagram_components(self):
+        """Setup diagram generation and viewing components."""
+        try:
+            # Get working directory from config manager
+            working_dir = self.config_manager.working_directory
+            if not working_dir:
+                logger.warning("Working directory not set. Diagrams will not be saved.")
+                return
+
+            # Get diagrams output directory from config
+            diagrams_output_dir_name = self.config_manager.config.diagrams.output_dir
+            diagrams_path = working_dir / diagrams_output_dir_name
+
+            # Create components
+            self.diagram_generator = DiagramGenerator(output_dir=diagrams_path)
+            self.diagram_renderer = DiagramRenderer()
+            self.diagram_viewer = DiagramViewer(parent=self)
+            
+            logger.info("Diagram components initialized.")
+
+        except Exception as e:
+            logger.error(f"Failed to initialize diagram components: {e}")
+            QMessageBox.critical(self, "Diagram Initialization Error",
+                                 f"Could not initialize diagram components: {e}")
+    
+    def _setup_collaboration_components(self):
+        """Setup collaboration and baseline management components."""
+        try:
+            # Initialize baseline manager
+            if self.database_initializer:
+                db_manager = self.database_initializer.get_database_manager()
+                self.baseline_manager = BaselineManager(db_manager)
+                
+                # Initialize branch and merge managers
+                self.branch_manager = BranchManager(db_manager)
+                self.merge_manager = MergeManager(db_manager)
+                
+                logger.info("Collaboration components initialized.")
+            else:
+                logger.warning("Database initializer not available. Collaboration features disabled.")
+                
+        except Exception as e:
+            logger.error(f"Failed to initialize collaboration components: {e}")
+            # Don't show error dialog here as it might be called during initialization
+            # Just log the error and continue
     
     def _setup_ui(self):
         """Setup the main user interface layout."""
@@ -222,15 +273,33 @@ class MainWindow(QMainWindow):
         overview_widget = QWidget()
         overview_layout = QVBoxLayout(overview_widget)
         
+        # System Information Section
+        info_group = QGroupBox("System Information")
+        info_layout = QVBoxLayout(info_group)
+        
         self.system_info_label = QLabel("Select a system to view details")
         self.system_info_label.setWordWrap(True)
-        overview_layout.addWidget(self.system_info_label)
+        info_layout.addWidget(self.system_info_label)
+        
+        overview_layout.addWidget(info_group)
+        
+        # System Management Section
+        management_group = QGroupBox("System Management")
+        management_layout = QVBoxLayout(management_group)
         
         # Edit system button
         self.edit_system_btn = QPushButton("Edit System")
         self.edit_system_btn.setEnabled(False)
         self.edit_system_btn.clicked.connect(self._edit_current_system)
-        overview_layout.addWidget(self.edit_system_btn)
+        management_layout.addWidget(self.edit_system_btn)
+        
+        # Add child system button
+        self.add_child_system_btn = QPushButton("Add Child System")
+        self.add_child_system_btn.setEnabled(False)
+        self.add_child_system_btn.clicked.connect(self._add_child_system)
+        management_layout.addWidget(self.add_child_system_btn)
+        
+        overview_layout.addWidget(management_group)
         
         overview_layout.addStretch()
         self.content_tabs.addTab(overview_widget, "Overview")
@@ -241,14 +310,24 @@ class MainWindow(QMainWindow):
         functions_layout = QVBoxLayout(functions_widget)
         
         # Toolbar
-        functions_toolbar = QHBoxLayout()
+        toolbar = QHBoxLayout()
         
-        add_function_btn = QPushButton("Add Function")
-        add_function_btn.clicked.connect(self._add_function)
-        functions_toolbar.addWidget(add_function_btn)
+        self.add_function_btn = QPushButton("Add Function")
+        self.add_function_btn.clicked.connect(self._add_function)
+        toolbar.addWidget(self.add_function_btn)
         
-        functions_toolbar.addStretch()
-        functions_layout.addLayout(functions_toolbar)
+        self.edit_function_btn = QPushButton("Edit Function")
+        self.edit_function_btn.clicked.connect(self._edit_function)
+        self.edit_function_btn.setEnabled(False)
+        toolbar.addWidget(self.edit_function_btn)
+
+        self.delete_function_btn = QPushButton("Delete Function")
+        self.delete_function_btn.clicked.connect(self._delete_function)
+        self.delete_function_btn.setEnabled(False)
+        toolbar.addWidget(self.delete_function_btn)
+        
+        toolbar.addStretch()
+        functions_layout.addLayout(toolbar)
         
         # Functions table
         self.functions_table = QTableWidget()
@@ -261,18 +340,50 @@ class MainWindow(QMainWindow):
         header.setSectionResizeMode(1, QHeaderView.ResizeToContents)
         
         self.functions_table.setSelectionBehavior(QTableWidget.SelectRows)
+        self.functions_table.itemSelectionChanged.connect(self._update_function_buttons_state)
         self.functions_table.doubleClicked.connect(self._edit_function)
         
         functions_layout.addWidget(self.functions_table)
         
         self.content_tabs.addTab(functions_widget, "Functions")
     
-    def _setup_interfaces_tab(self):
-        """Setup interfaces tab (placeholder)."""
-        interfaces_widget = QWidget()
-        interfaces_layout = QVBoxLayout(interfaces_widget)
-        interfaces_layout.addWidget(QLabel("Interfaces - Coming Soon"))
-        self.content_tabs.addTab(interfaces_widget, "Interfaces")
+    def _update_function_buttons_state(self):
+        """Enable/disable function buttons based on selection."""
+        has_selection = bool(self.functions_table.selectedItems())
+        self.edit_function_btn.setEnabled(has_selection)
+        self.delete_function_btn.setEnabled(has_selection)
+        
+    def _delete_function(self):
+        """Delete the selected function."""
+        selected_items = self.functions_table.selectedItems()
+        if not selected_items:
+            return
+            
+        function_id = selected_items[0].data(Qt.UserRole)
+        function_name = selected_items[1].text()
+        
+        reply = QMessageBox.question(
+            self,
+            "Delete Function",
+            f"Are you sure you want to delete function '{function_name}'?",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No
+        )
+        
+        if reply == QMessageBox.Yes:
+            try:
+                db_manager = self.database_initializer.get_database_manager()
+                connection = db_manager.get_connection()
+                repo = EntityFactory.get_repository(connection, Function)
+                if repo.delete(function_id):
+                    logger.info(f"Deleted function: {function_name} (ID: {function_id})")
+                    if self.current_system_id:
+                        self._load_functions_for_system(self.current_system_id)
+                else:
+                    self._show_error("Delete Failed", "Failed to delete function from database.")
+            except Exception as e:
+                logger.error(f"Failed to delete function: {str(e)}")
+                self._show_error("Delete Failed", str(e))
     
     def _setup_requirements_tab(self):
         """Setup requirements management tab."""
@@ -280,112 +391,83 @@ class MainWindow(QMainWindow):
         requirements_layout = QVBoxLayout(requirements_widget)
         
         # Toolbar
-        requirements_toolbar = QHBoxLayout()
+        toolbar = QHBoxLayout()
         
-        add_requirement_btn = QPushButton("Add Requirement")
-        add_requirement_btn.clicked.connect(self._add_requirement)
-        requirements_toolbar.addWidget(add_requirement_btn)
+        self.add_requirement_btn = QPushButton("Add Requirement")
+        self.add_requirement_btn.clicked.connect(self._add_requirement)
+        toolbar.addWidget(self.add_requirement_btn)
         
-        requirements_toolbar.addStretch()
-        requirements_layout.addLayout(requirements_toolbar)
+        self.edit_requirement_btn = QPushButton("Edit Requirement")
+        self.edit_requirement_btn.clicked.connect(self._edit_requirement)
+        self.edit_requirement_btn.setEnabled(False)
+        toolbar.addWidget(self.edit_requirement_btn)
+
+        self.delete_requirement_btn = QPushButton("Delete Requirement")
+        self.delete_requirement_btn.clicked.connect(self._delete_requirement)
+        self.delete_requirement_btn.setEnabled(False)
+        toolbar.addWidget(self.delete_requirement_btn)
+
+        toolbar.addStretch()
+        requirements_layout.addLayout(toolbar)
         
         # Requirements table
         self.requirements_table = QTableWidget()
         self.requirements_table.setColumnCount(5)
-        self.requirements_table.setHorizontalHeaderLabels(["ID", "Alphanumeric ID", "Text", "Verification", "Criticality"])
+        self.requirements_table.setHorizontalHeaderLabels(["ID", "Alphanumeric ID", "Requirement Text", "Verification Method", "Criticality"])
         
         header = self.requirements_table.horizontalHeader()
         header.setStretchLastSection(True)
         header.setSectionResizeMode(0, QHeaderView.ResizeToContents)
         header.setSectionResizeMode(1, QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(2, QHeaderView.ResizeToContents)
         header.setSectionResizeMode(3, QHeaderView.ResizeToContents)
-        header.setSectionResizeMode(4, QHeaderView.ResizeToContents)
         
         self.requirements_table.setSelectionBehavior(QTableWidget.SelectRows)
+        self.requirements_table.itemSelectionChanged.connect(self._update_requirement_buttons_state)
         self.requirements_table.doubleClicked.connect(self._edit_requirement)
         
         requirements_layout.addWidget(self.requirements_table)
         
         self.content_tabs.addTab(requirements_widget, "Requirements")
-    
-    def _on_system_selected(self, system_id: int):
-        """Handle system selection from hierarchy tree."""
-        try:
-            self.current_system_id = system_id
+
+    def _update_requirement_buttons_state(self):
+        """Enable/disable requirement buttons based on selection."""
+        has_selection = bool(self.requirements_table.selectedItems())
+        self.edit_requirement_btn.setEnabled(has_selection)
+        self.delete_requirement_btn.setEnabled(has_selection)
+
+    def _delete_requirement(self):
+        """Delete the selected requirement."""
+        selected_items = self.requirements_table.selectedItems()
+        if not selected_items:
+            return
             
-            # Get system from database
-            db_manager = self.database_initializer.get_database_manager()
-            connection = db_manager.get_connection()
-            
-            system_data = connection.fetchone(
-                "SELECT * FROM systems WHERE id = ?",
-                (system_id,)
-            )
-            
-            if system_data:
-                system_dict = dict(system_data)
-                system = System(**system_dict)
-                
-                # Update breadcrumb
-                self.breadcrumb_label.setText(f"{system.get_hierarchical_id()} - {system.system_name}")
-                
-                # Update overview tab
-                self.system_info_label.setText(f"""
-                <h3>{system.system_name}</h3>
-                <p><strong>ID:</strong> {system.get_hierarchical_id()}</p>
-                <p><strong>Description:</strong> {system.system_description or 'No description'}</p>
-                <p><strong>Baseline:</strong> {system.baseline}</p>
-                <p><strong>Created:</strong> {system.created_at}</p>
-                """)
-                
-                # Enable edit button
-                self.edit_system_btn.setEnabled(True)
-                
-                # Load related entities
-                self._load_functions_for_system(system_id)
-                self._load_requirements_for_system(system_id)
-                
-                logger.info(f"System selected: {system.system_name}")
-            
-        except Exception as e:
-            logger.error(f"Failed to load system details: {str(e)}")
-            self.breadcrumb_label.setText("Error loading system")
-    
-    def _on_system_changed(self, system_id: int):
-        """Handle system changes from hierarchy tree."""
-        if system_id == self.current_system_id:
-            # Refresh current system view
-            self._on_system_selected(system_id)
-    
-    def _load_functions_for_system(self, system_id: int):
-        """Load functions for the selected system."""
-        try:
-            db_manager = self.database_initializer.get_database_manager()
-            connection = db_manager.get_connection()
-            
-            functions = connection.fetchall(
-                "SELECT * FROM functions WHERE system_id = ? AND baseline = ? ORDER BY system_hierarchy",
-                (system_id, "Working")
-            )
-            
-            # Clear and populate functions table
-            self.functions_table.setRowCount(len(functions))
-            
-            for row, func_data in enumerate(functions):
-                func_dict = dict(func_data)
-                function = Function(**func_dict)
-                
-                self.functions_table.setItem(row, 0, QTableWidgetItem(function.get_hierarchical_id()))
-                self.functions_table.setItem(row, 1, QTableWidgetItem(function.function_name))
-                self.functions_table.setItem(row, 2, QTableWidgetItem(function.function_description or ""))
-                self.functions_table.setItem(row, 3, QTableWidgetItem(function.criticality or "Medium"))
-                
-                # Store function ID for editing
-                self.functions_table.item(row, 0).setData(Qt.UserRole, function.id)
-            
-        except Exception as e:
-            logger.error(f"Failed to load functions: {str(e)}")
-    
+        requirement_id = selected_items[0].data(Qt.UserRole)
+        requirement_name = selected_items[1].text()
+        
+        reply = QMessageBox.question(
+            self,
+            "Delete Requirement",
+            f"Are you sure you want to delete requirement '{requirement_name}'?",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No
+        )
+        
+        if reply == QMessageBox.Yes:
+            try:
+                db_manager = self.database_initializer.get_database_manager()
+                connection = db_manager.get_connection()
+                repo = EntityFactory.get_repository(connection, Requirement)
+                if repo.delete(requirement_id):
+                    logger.info(f"Deleted requirement: {requirement_name} (ID: {requirement_id})")
+                    if self.current_system_id:
+                        self._load_requirements_for_system(self.current_system_id)
+                else:
+                    self._show_error("Delete Failed", "Failed to delete requirement from database.")
+            except Exception as e:
+                logger.error(f"Failed to delete requirement: {str(e)}")
+                self._show_error("Delete Failed", str(e))
+
     def _load_requirements_for_system(self, system_id: int):
         """Load requirements for the selected system."""
         try:
@@ -403,12 +485,20 @@ class MainWindow(QMainWindow):
             for row, req_data in enumerate(requirements):
                 req_dict = dict(req_data)
                 requirement = Requirement(**req_dict)
-                
-                self.requirements_table.setItem(row, 0, QTableWidgetItem(requirement.get_hierarchical_id()))
-                self.requirements_table.setItem(row, 1, QTableWidgetItem(requirement.alphanumeric_identifier or ""))
-                self.requirements_table.setItem(row, 2, QTableWidgetItem(requirement.requirement_text[:100] + "..." if len(requirement.requirement_text) > 100 else requirement.requirement_text))
-                self.requirements_table.setItem(row, 3, QTableWidgetItem(requirement.verification_method or ""))
-                self.requirements_table.setItem(row, 4, QTableWidgetItem(requirement.criticality or "Medium"))
+
+                items = [
+                    QTableWidgetItem(requirement.get_hierarchical_id()),
+                    QTableWidgetItem(requirement.alphanumeric_identifier or ""),
+                    QTableWidgetItem(requirement.requirement_text[:100] + "..." if len(requirement.requirement_text) > 100 else requirement.requirement_text),
+                    QTableWidgetItem(requirement.verification_method or ""),
+                    QTableWidgetItem(requirement.criticality or "Medium")
+                ]
+
+                for item in items:
+                    item.setFlags(item.flags() & ~Qt.ItemIsEditable)
+
+                for col, item in enumerate(items):
+                    self.requirements_table.setItem(row, col, item)
                 
                 # Store requirement ID for editing
                 self.requirements_table.item(row, 0).setData(Qt.UserRole, requirement.id)
@@ -416,32 +506,594 @@ class MainWindow(QMainWindow):
         except Exception as e:
             logger.error(f"Failed to load requirements: {str(e)}")
     
+    def _setup_interfaces_tab(self):
+        """Setup interfaces management tab."""
+        interfaces_widget = QWidget()
+        interfaces_layout = QVBoxLayout(interfaces_widget)
+        
+        # Toolbar
+        toolbar = QHBoxLayout()
+        
+        self.add_interface_btn = QPushButton("Add Interface")
+        self.add_interface_btn.clicked.connect(self._add_interface)
+        toolbar.addWidget(self.add_interface_btn)
+        
+        self.edit_interface_btn = QPushButton("Edit Interface")
+        self.edit_interface_btn.clicked.connect(self._edit_interface)
+        self.edit_interface_btn.setEnabled(False)
+        toolbar.addWidget(self.edit_interface_btn)
+
+        self.delete_interface_btn = QPushButton("Delete Interface")
+        self.delete_interface_btn.clicked.connect(self._delete_interface)
+        self.delete_interface_btn.setEnabled(False)
+        toolbar.addWidget(self.delete_interface_btn)
+        
+        toolbar.addStretch()
+        interfaces_layout.addLayout(toolbar)
+        
+        # Interfaces table
+        self.interfaces_table = QTableWidget()
+        self.interfaces_table.setColumnCount(4)
+        self.interfaces_table.setHorizontalHeaderLabels(["ID", "Name", "System", "Description"])
+        
+        header = self.interfaces_table.horizontalHeader()
+        header.setStretchLastSection(True)
+        header.setSectionResizeMode(0, QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(1, QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(2, QHeaderView.ResizeToContents)
+        
+        self.interfaces_table.setSelectionBehavior(QTableWidget.SelectRows)
+        self.interfaces_table.itemSelectionChanged.connect(self._update_interface_buttons_state)
+        self.interfaces_table.doubleClicked.connect(self._edit_interface)
+        
+        interfaces_layout.addWidget(self.interfaces_table)
+        
+        self.content_tabs.addTab(interfaces_widget, "Interfaces")
+
+    def _update_interface_buttons_state(self):
+        """Enable/disable interface buttons based on selection."""
+        has_selection = bool(self.interfaces_table.selectedItems())
+        self.edit_interface_btn.setEnabled(has_selection)
+        self.delete_interface_btn.setEnabled(has_selection)
+        
+    def _delete_interface(self):
+        """Delete the selected interface."""
+        selected_items = self.interfaces_table.selectedItems()
+        if not selected_items:
+            return
+            
+        interface_id = selected_items[0].data(Qt.UserRole)
+        interface_name = selected_items[1].text()
+        
+        reply = QMessageBox.question(
+            self,
+            "Delete Interface",
+            f"Are you sure you want to delete interface '{interface_name}'?",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No
+        )
+        
+        if reply == QMessageBox.Yes:
+            try:
+                db_manager = self.database_initializer.get_database_manager()
+                connection = db_manager.get_connection()
+                repo = EntityFactory.get_repository(connection, Interface)
+                if repo.delete(interface_id):
+                    logger.info(f"Deleted interface: {interface_name} (ID: {interface_id})")
+                    if self.current_system_id:
+                        self._load_interfaces_for_system(self.current_system_id)
+                else:
+                    self._show_error("Delete Failed", "Failed to delete interface from database.")
+            except Exception as e:
+                logger.error(f"Failed to delete interface: {str(e)}")
+                self._show_error("Delete Failed", str(e))
+
+    def _setup_assets_tab(self):
+        """Setup assets management tab."""
+        assets_widget = QWidget()
+        assets_layout = QVBoxLayout(assets_widget)
+        
+        # Toolbar
+        toolbar = QHBoxLayout()
+        
+        self.add_asset_btn = QPushButton("Add Asset")
+        self.add_asset_btn.clicked.connect(self._add_asset)
+        toolbar.addWidget(self.add_asset_btn)
+        
+        self.edit_asset_btn = QPushButton("Edit Asset")
+        self.edit_asset_btn.clicked.connect(self._edit_asset)
+        self.edit_asset_btn.setEnabled(False)
+        toolbar.addWidget(self.edit_asset_btn)
+
+        self.delete_asset_btn = QPushButton("Delete Asset")
+        self.delete_asset_btn.clicked.connect(self._delete_asset)
+        self.delete_asset_btn.setEnabled(False)
+        toolbar.addWidget(self.delete_asset_btn)
+        
+        toolbar.addStretch()
+        assets_layout.addLayout(toolbar)
+        
+        # Assets table
+        self.assets_table = QTableWidget()
+        self.assets_table.setColumnCount(4)
+        self.assets_table.setHorizontalHeaderLabels(["ID", "Name", "System", "Description"])
+        
+        header = self.assets_table.horizontalHeader()
+        header.setStretchLastSection(True)
+        header.setSectionResizeMode(0, QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(1, QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(2, QHeaderView.ResizeToContents)
+        
+        self.assets_table.setSelectionBehavior(QTableWidget.SelectRows)
+        self.assets_table.itemSelectionChanged.connect(self._update_asset_buttons_state)
+        self.assets_table.doubleClicked.connect(self._edit_asset)
+        
+        assets_layout.addWidget(self.assets_table)
+        
+        self.content_tabs.addTab(assets_widget, "Assets")
+
+    def _update_asset_buttons_state(self):
+        """Enable/disable asset buttons based on selection."""
+        has_selection = bool(self.assets_table.selectedItems())
+        self.edit_asset_btn.setEnabled(has_selection)
+        self.delete_asset_btn.setEnabled(has_selection)
+        
+    def _delete_asset(self):
+        """Delete the selected asset."""
+        selected_items = self.assets_table.selectedItems()
+        if not selected_items:
+            return
+            
+        asset_id = selected_items[0].data(Qt.UserRole)
+        asset_name = selected_items[1].text()
+        
+        reply = QMessageBox.question(
+            self,
+            "Delete Asset",
+            f"Are you sure you want to delete asset '{asset_name}'?",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No
+        )
+        
+        if reply == QMessageBox.Yes:
+            try:
+                db_manager = self.database_initializer.get_database_manager()
+                connection = db_manager.get_connection()
+                repo = EntityFactory.get_repository(connection, Asset)
+                if repo.delete(asset_id):
+                    logger.info(f"Deleted asset: {asset_name} (ID: {asset_id})")
+                    if self.current_system_id:
+                        self._load_assets_for_system(self.current_system_id)
+                else:
+                    self._show_error("Delete Failed", "Failed to delete asset from database.")
+            except Exception as e:
+                logger.error(f"Failed to delete asset: {str(e)}")
+                self._show_error("Delete Failed", str(e))
+
+    def _setup_hazards_tab(self):
+        """Setup hazards management tab."""
+        hazards_widget = QWidget()
+        hazards_layout = QVBoxLayout(hazards_widget)
+        
+        # Toolbar
+        toolbar = QHBoxLayout()
+        
+        self.add_hazard_btn = QPushButton("Add Hazard")
+        self.add_hazard_btn.clicked.connect(self._add_hazard)
+        toolbar.addWidget(self.add_hazard_btn)
+        
+        self.edit_hazard_btn = QPushButton("Edit Hazard")
+        self.edit_hazard_btn.clicked.connect(self._edit_hazard)
+        self.edit_hazard_btn.setEnabled(False)
+        toolbar.addWidget(self.edit_hazard_btn)
+
+        self.delete_hazard_btn = QPushButton("Delete Hazard")
+        self.delete_hazard_btn.clicked.connect(self._delete_hazard)
+        self.delete_hazard_btn.setEnabled(False)
+        toolbar.addWidget(self.delete_hazard_btn)
+        
+        toolbar.addStretch()
+        hazards_layout.addLayout(toolbar)
+        
+        # Hazards table
+        self.hazards_table = QTableWidget()
+        self.hazards_table.setColumnCount(4)
+        self.hazards_table.setHorizontalHeaderLabels(["ID", "Name", "System", "Description"])
+        
+        header = self.hazards_table.horizontalHeader()
+        header.setStretchLastSection(True)
+        header.setSectionResizeMode(0, QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(1, QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(2, QHeaderView.ResizeToContents)
+        
+        self.hazards_table.setSelectionBehavior(QTableWidget.SelectRows)
+        self.hazards_table.itemSelectionChanged.connect(self._update_hazard_buttons_state)
+        self.hazards_table.doubleClicked.connect(self._edit_hazard)
+        
+        hazards_layout.addWidget(self.hazards_table)
+        
+        self.content_tabs.addTab(hazards_widget, "Hazards")
+
+    def _update_hazard_buttons_state(self):
+        """Enable/disable hazard buttons based on selection."""
+        has_selection = bool(self.hazards_table.selectedItems())
+        self.edit_hazard_btn.setEnabled(has_selection)
+        self.delete_hazard_btn.setEnabled(has_selection)
+        
+    def _delete_hazard(self):
+        """Delete the selected hazard."""
+        selected_items = self.hazards_table.selectedItems()
+        if not selected_items:
+            return
+            
+        hazard_id = selected_items[0].data(Qt.UserRole)
+        hazard_name = selected_items[1].text()
+        
+        reply = QMessageBox.question(
+            self,
+            "Delete Hazard",
+            f"Are you sure you want to delete hazard '{hazard_name}'?",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No
+        )
+        
+        if reply == QMessageBox.Yes:
+            try:
+                db_manager = self.database_initializer.get_database_manager()
+                connection = db_manager.get_connection()
+                repo = EntityFactory.get_repository(connection, Hazard)
+                if repo.delete(hazard_id):
+                    logger.info(f"Deleted hazard: {hazard_name} (ID: {hazard_id})")
+                    self._load_hazards_for_system(self.current_system_id if self.current_system_id else 0)
+                else:
+                    self._show_error("Delete Failed", "Failed to delete hazard from database.")
+            except Exception as e:
+                logger.error(f"Failed to delete hazard: {str(e)}")
+                self._show_error("Delete Failed", str(e))
+
+    def _setup_losses_tab(self):
+        """Setup losses management tab."""
+        losses_widget = QWidget()
+        losses_layout = QVBoxLayout(losses_widget)
+        
+        # Toolbar
+        toolbar = QHBoxLayout()
+        
+        self.add_loss_btn = QPushButton("Add Loss")
+        self.add_loss_btn.clicked.connect(self._add_loss)
+        toolbar.addWidget(self.add_loss_btn)
+        
+        self.edit_loss_btn = QPushButton("Edit Loss")
+        self.edit_loss_btn.clicked.connect(self._edit_loss)
+        self.edit_loss_btn.setEnabled(False)
+        toolbar.addWidget(self.edit_loss_btn)
+
+        self.delete_loss_btn = QPushButton("Delete Loss")
+        self.delete_loss_btn.clicked.connect(self._delete_loss)
+        self.delete_loss_btn.setEnabled(False)
+        toolbar.addWidget(self.delete_loss_btn)
+        
+        toolbar.addStretch()
+        losses_layout.addLayout(toolbar)
+        
+        # Losses table
+        self.losses_table = QTableWidget()
+        self.losses_table.setColumnCount(4)
+        self.losses_table.setHorizontalHeaderLabels(["ID", "Name", "System", "Description"])
+        
+        header = self.losses_table.horizontalHeader()
+        header.setStretchLastSection(True)
+        header.setSectionResizeMode(0, QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(1, QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(2, QHeaderView.ResizeToContents)
+        
+        self.losses_table.setSelectionBehavior(QTableWidget.SelectRows)
+        self.losses_table.itemSelectionChanged.connect(self._update_loss_buttons_state)
+        self.losses_table.doubleClicked.connect(self._edit_loss)
+        
+        losses_layout.addWidget(self.losses_table)
+        
+        self.content_tabs.addTab(losses_widget, "Losses")
+
+    def _update_loss_buttons_state(self):
+        """Enable/disable loss buttons based on selection."""
+        has_selection = bool(self.losses_table.selectedItems())
+        self.edit_loss_btn.setEnabled(has_selection)
+        self.delete_loss_btn.setEnabled(has_selection)
+        
+    def _delete_loss(self):
+        """Delete the selected loss."""
+        selected_items = self.losses_table.selectedItems()
+        if not selected_items:
+            return
+            
+        loss_id = selected_items[0].data(Qt.UserRole)
+        loss_name = selected_items[1].text()
+        
+        reply = QMessageBox.question(
+            self,
+            "Delete Loss",
+            f"Are you sure you want to delete loss '{loss_name}'?",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No
+        )
+        
+        if reply == QMessageBox.Yes:
+            try:
+                db_manager = self.database_initializer.get_database_manager()
+                connection = db_manager.get_connection()
+                repo = EntityFactory.get_repository(connection, Loss)
+                if repo.delete(loss_id):
+                    logger.info(f"Deleted loss: {loss_name} (ID: {loss_id})")
+                    self._load_losses_for_system(self.current_system_id if self.current_system_id else 0)
+                else:
+                    self._show_error("Delete Failed", "Failed to delete loss from database.")
+            except Exception as e:
+                logger.error(f"Failed to delete loss: {str(e)}")
+                self._show_error("Delete Failed", str(e))
+
+    def _setup_control_structures_tab(self):
+        """Setup control structures management tab."""
+        control_structures_widget = QWidget()
+        control_structures_layout = QVBoxLayout(control_structures_widget)
+        
+        # Toolbar
+        toolbar = QHBoxLayout()
+        
+        self.add_control_structure_btn = QPushButton("Add Control Structure")
+        self.add_control_structure_btn.clicked.connect(self._add_control_structure)
+        toolbar.addWidget(self.add_control_structure_btn)
+        
+        self.edit_control_structure_btn = QPushButton("Edit Control Structure")
+        self.edit_control_structure_btn.clicked.connect(self._edit_control_structure)
+        self.edit_control_structure_btn.setEnabled(False)
+        toolbar.addWidget(self.edit_control_structure_btn)
+
+        self.delete_control_structure_btn = QPushButton("Delete Control Structure")
+        self.delete_control_structure_btn.clicked.connect(self._delete_control_structure)
+        self.delete_control_structure_btn.setEnabled(False)
+        toolbar.addWidget(self.delete_control_structure_btn)
+        
+        toolbar.addStretch()
+        control_structures_layout.addLayout(toolbar)
+        
+        # Control structures table
+        self.control_structures_table = QTableWidget()
+        self.control_structures_table.setColumnCount(4)
+        self.control_structures_table.setHorizontalHeaderLabels(["ID", "Name", "System", "Description"])
+        
+        header = self.control_structures_table.horizontalHeader()
+        header.setStretchLastSection(True)
+        header.setSectionResizeMode(0, QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(1, QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(2, QHeaderView.ResizeToContents)
+        
+        self.control_structures_table.setSelectionBehavior(QTableWidget.SelectRows)
+        self.control_structures_table.itemSelectionChanged.connect(self._update_control_structure_buttons_state)
+        self.control_structures_table.doubleClicked.connect(self._edit_control_structure)
+        
+        control_structures_layout.addWidget(self.control_structures_table)
+        
+        self.content_tabs.addTab(control_structures_widget, "Control Structures")
+
+    def _update_control_structure_buttons_state(self):
+        """Enable/disable control structure buttons based on selection."""
+        has_selection = bool(self.control_structures_table.selectedItems())
+        self.edit_control_structure_btn.setEnabled(has_selection)
+        self.delete_control_structure_btn.setEnabled(has_selection)
+        
+    def _delete_control_structure(self):
+        """Delete the selected control structure."""
+        selected_items = self.control_structures_table.selectedItems()
+        if not selected_items:
+            return
+            
+        control_structure_id = selected_items[0].data(Qt.UserRole)
+        control_structure_name = selected_items[1].text()
+        
+        reply = QMessageBox.question(
+            self,
+            "Delete Control Structure",
+            f"Are you sure you want to delete control structure '{control_structure_name}'?",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No
+        )
+        
+        if reply == QMessageBox.Yes:
+            try:
+                db_manager = self.database_initializer.get_database_manager()
+                connection = db_manager.get_connection()
+                repo = EntityFactory.get_repository(connection, ControlStructure)
+                if repo.delete(control_structure_id):
+                    logger.info(f"Deleted control structure: {control_structure_name} (ID: {control_structure_id})")
+                    if self.current_system_id:
+                        self._load_control_structures_for_system(self.current_system_id)
+                else:
+                    self._show_error("Delete Failed", "Failed to delete control structure from database.")
+            except Exception as e:
+                logger.error(f"Failed to delete control structure: {str(e)}")
+                self._show_error("Delete Failed", str(e))
+
+    def _setup_controllers_tab(self):
+        """Setup controllers management tab."""
+        controllers_widget = QWidget()
+        controllers_layout = QVBoxLayout(controllers_widget)
+        
+        # Toolbar
+        toolbar = QHBoxLayout()
+        
+        self.add_controller_btn = QPushButton("Add Controller")
+        self.add_controller_btn.clicked.connect(self._add_controller)
+        toolbar.addWidget(self.add_controller_btn)
+        
+        self.edit_controller_btn = QPushButton("Edit Controller")
+        self.edit_controller_btn.clicked.connect(self._edit_controller)
+        self.edit_controller_btn.setEnabled(False)
+        toolbar.addWidget(self.edit_controller_btn)
+
+        self.delete_controller_btn = QPushButton("Delete Controller")
+        self.delete_controller_btn.clicked.connect(self._delete_controller)
+        self.delete_controller_btn.setEnabled(False)
+        toolbar.addWidget(self.delete_controller_btn)
+        
+        toolbar.addStretch()
+        controllers_layout.addLayout(toolbar)
+        
+        # Controllers table
+        self.controllers_table = QTableWidget()
+        self.controllers_table.setColumnCount(4)
+        self.controllers_table.setHorizontalHeaderLabels(["ID", "Name", "System", "Description"])
+        
+        header = self.controllers_table.horizontalHeader()
+        header.setStretchLastSection(True)
+        header.setSectionResizeMode(0, QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(1, QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(2, QHeaderView.ResizeToContents)
+        
+        self.controllers_table.setSelectionBehavior(QTableWidget.SelectRows)
+        self.controllers_table.itemSelectionChanged.connect(self._update_controller_buttons_state)
+        self.controllers_table.doubleClicked.connect(self._edit_controller)
+        
+        controllers_layout.addWidget(self.controllers_table)
+        
+        self.content_tabs.addTab(controllers_widget, "Controllers")
+
+    def _update_controller_buttons_state(self):
+        """Enable/disable controller buttons based on selection."""
+        has_selection = bool(self.controllers_table.selectedItems())
+        self.edit_controller_btn.setEnabled(has_selection)
+        self.delete_controller_btn.setEnabled(has_selection)
+        
+    def _delete_controller(self):
+        """Delete the selected controller."""
+        selected_items = self.controllers_table.selectedItems()
+        if not selected_items:
+            return
+            
+        controller_id = selected_items[0].data(Qt.UserRole)
+        controller_name = selected_items[1].text()
+        
+        reply = QMessageBox.question(
+            self,
+            "Delete Controller",
+            f"Are you sure you want to delete controller '{controller_name}'?",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No
+        )
+        
+        if reply == QMessageBox.Yes:
+            try:
+                db_manager = self.database_initializer.get_database_manager()
+                connection = db_manager.get_connection()
+                repo = EntityFactory.get_repository(connection, Controller)
+                if repo.delete(controller_id):
+                    logger.info(f"Deleted controller: {controller_name} (ID: {controller_id})")
+                    if self.current_system_id:
+                        self._load_controllers_for_system(self.current_system_id)
+                else:
+                    self._show_error("Delete Failed", "Failed to delete controller from database.")
+            except Exception as e:
+                logger.error(f"Failed to delete controller: {str(e)}")
+                self._show_error("Delete Failed", str(e))
+
+    def _setup_diagrams_tab(self):
+        """Setup diagrams management tab."""
+        diagrams_widget = QWidget()
+        diagrams_layout = QVBoxLayout(diagrams_widget)
+        
+        # Toolbar
+        toolbar = QHBoxLayout()
+        
+        self.generate_diagram_btn = QPushButton("Generate Diagram")
+        self.generate_diagram_btn.clicked.connect(self._generate_diagram)
+        toolbar.addWidget(self.generate_diagram_btn)
+        
+        self.view_diagram_btn = QPushButton("View Diagram")
+        self.view_diagram_btn.clicked.connect(self._view_diagram)
+        self.view_diagram_btn.setEnabled(False)
+        toolbar.addWidget(self.view_diagram_btn)
+        
+        toolbar.addStretch()
+        diagrams_layout.addLayout(toolbar)
+        
+        # Diagrams list
+        self.diagrams_list = QTableWidget()
+        self.diagrams_list.setColumnCount(3)
+        self.diagrams_list.setHorizontalHeaderLabels(["Name", "Type", "Last Generated"])
+        
+        header = self.diagrams_list.horizontalHeader()
+        header.setStretchLastSection(True)
+        header.setSectionResizeMode(0, QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(1, QHeaderView.ResizeToContents)
+        
+        self.diagrams_list.setSelectionBehavior(QTableWidget.SelectRows)
+        self.diagrams_list.itemSelectionChanged.connect(self._update_diagram_buttons_state)
+        self.diagrams_list.doubleClicked.connect(self._view_diagram)
+        
+        diagrams_layout.addWidget(self.diagrams_list)
+        
+        self.content_tabs.addTab(diagrams_widget, "Diagrams")
+
+    def _update_diagram_buttons_state(self):
+        """Enable/disable diagram buttons based on selection."""
+        has_selection = bool(self.diagrams_list.selectedItems())
+        self.view_diagram_btn.setEnabled(has_selection)
+    
+    def _generate_diagram(self):
+        """Generate a system diagram."""
+        if not self.current_system_id:
+            QMessageBox.warning(self, "No System Selected", "Please select a system first.")
+            return
+        
+        if not self.diagram_generator:
+            QMessageBox.warning(self, "Diagram Generator Not Available", "Diagram generation is not available.")
+            return
+        
+        # TODO: Implement diagram generation
+        QMessageBox.information(self, "Diagram Generation", "Diagram generation feature coming soon.")
+    
+    def _view_diagram(self):
+        """View the selected diagram."""
+        if not self.diagram_viewer:
+            QMessageBox.warning(self, "Diagram Viewer Not Available", "Diagram viewing is not available.")
+            return
+        
+        # TODO: Implement diagram viewing
+        QMessageBox.information(self, "Diagram Viewing", "Diagram viewing feature coming soon.")
+    
     def _edit_current_system(self):
         """Edit the currently selected system."""
         if not self.current_system_id:
+            QMessageBox.information(self, "No Selection", "Please select a system to edit.")
             return
         
         try:
             # Get system from database
             db_manager = self.database_initializer.get_database_manager()
             connection = db_manager.get_connection()
+            system_repo = EntityFactory.get_repository(connection, System)
+            system = system_repo.get_by_id(self.current_system_id)
             
-            system_data = connection.fetchone(
-                "SELECT * FROM systems WHERE id = ?",
-                (self.current_system_id,)
-            )
+            if not system:
+                QMessageBox.warning(self, "System Not Found", "Selected system not found in database.")
+                return
             
-            if system_data:
-                system_dict = dict(system_data)
-                system = System(**system_dict)
-                
-                # Open edit dialog
-                dialog = SystemEditDialog(system, parent=self)
-                dialog.system_saved.connect(self._on_system_saved)
-                dialog.exec()
-        
+            # Open edit dialog
+            dialog = SystemEditDialog(system=system, parent=self)
+            if dialog.exec() == QDialog.Accepted:
+                updated_system = dialog.get_system()
+                if updated_system and system_repo.update(updated_system):
+                    # Refresh hierarchy tree
+                    self.hierarchy_tree.refresh_from_database()
+                    # Update breadcrumb
+                    self._update_breadcrumb(updated_system)
+                    logger.info(f"Updated system: {updated_system.system_name}")
+                else:
+                    QMessageBox.warning(self, "Update Failed", "Failed to update system.")
+                    
         except Exception as e:
             logger.error(f"Failed to edit system: {str(e)}")
+            QMessageBox.critical(self, "Edit Failed", f"Failed to edit system:\n{str(e)}")
     
     def _add_function(self):
         """Add a new function to the current system."""
@@ -484,6 +1136,687 @@ class MainWindow(QMainWindow):
         except Exception as e:
             logger.error(f"Failed to edit function: {str(e)}")
     
+    def _on_function_saved(self, function: Function):
+        """Handle function saved event."""
+        try:
+            db_manager = self.database_initializer.get_database_manager()
+            connection = db_manager.get_connection()
+            function_repo = EntityFactory.get_repository(connection, Function)
+            
+            if function.id is None:
+                # New function
+                new_id = function_repo.create(function)
+                if new_id:
+                    function.id = new_id
+                    logger.info(f"Created function: {function.function_name}")
+                else:
+                    QMessageBox.critical(self, "Save Failed", "Failed to create function in database")
+                    return
+            else:
+                # Update existing function
+                if not function_repo.update(function):
+                    QMessageBox.critical(self, "Save Failed", "Failed to update function in database")
+                    return
+                logger.info(f"Updated function: {function.function_name}")
+            
+            # Refresh the functions table
+            if self.current_system_id:
+                self._load_functions_for_system(self.current_system_id)
+            
+        except Exception as e:
+            logger.error(f"Failed to save function: {str(e)}")
+            QMessageBox.critical(self, "Save Failed", f"Failed to save function:\n{str(e)}")
+    
+    def _add_interface(self):
+        """Add a new interface to the current system."""
+        if not self.current_system_id:
+            QMessageBox.warning(self, "No System Selected", "Please select a system first.")
+            return
+        
+        dialog = InterfaceEditDialog(system_id=self.current_system_id, parent=self)
+        dialog.interface_saved.connect(self._on_interface_saved)
+        dialog.exec()
+    
+    def _edit_interface(self):
+        """Edit selected interface."""
+        current_row = self.interfaces_table.currentRow()
+        if current_row < 0:
+            return
+        
+        interface_id = self.interfaces_table.item(current_row, 0).data(Qt.UserRole)
+        if not interface_id:
+            return
+        
+        try:
+            # Get interface from database
+            db_manager = self.database_initializer.get_database_manager()
+            connection = db_manager.get_connection()
+            
+            interface_data = connection.fetchone(
+                "SELECT * FROM interfaces WHERE id = ?",
+                (interface_id,)
+            )
+            
+            if interface_data:
+                int_dict = dict(interface_data)
+                interface = Interface(**int_dict)
+                
+                dialog = InterfaceEditDialog(interface, parent=self)
+                dialog.interface_saved.connect(self._on_interface_saved)
+                dialog.exec()
+        
+        except Exception as e:
+            logger.error(f"Failed to edit interface: {str(e)}")
+    
+    def _on_interface_saved(self, interface: Interface):
+        """Handle interface saved event."""
+        try:
+            # Save to database
+            db_manager = self.database_initializer.get_database_manager()
+            connection = db_manager.get_connection()
+            interface_repo = EntityFactory.get_repository(connection, Interface)
+            
+            if interface.id is None:
+                # New interface
+                new_id = interface_repo.create(interface)
+                if new_id:
+                    interface.id = new_id
+                    logger.info(f"Created interface: {interface.interface_name}")
+                else:
+                    QMessageBox.critical(self, "Save Failed", "Failed to create interface in database")
+                    return
+            else:
+                # Update existing interface
+                if not interface_repo.update(interface):
+                    QMessageBox.critical(self, "Save Failed", "Failed to update interface in database")
+                    return
+                logger.info(f"Updated interface: {interface.interface_name}")
+            
+            # Refresh the interfaces table
+            if self.current_system_id:
+                self._load_interfaces_for_system(self.current_system_id)
+            
+        except Exception as e:
+            logger.error(f"Failed to save interface: {str(e)}")
+            QMessageBox.critical(self, "Save Failed", f"Failed to save interface:\n{str(e)}")
+    
+    def _add_asset(self):
+        """Add a new asset to the current system."""
+        if not self.current_system_id:
+            QMessageBox.warning(self, "No System Selected", "Please select a system first.")
+            return
+        
+        dialog = AssetEditDialog(system_id=self.current_system_id, parent=self)
+        dialog.asset_saved.connect(self._on_asset_saved)
+        dialog.exec()
+    
+    def _edit_asset(self):
+        """Edit selected asset."""
+        current_row = self.assets_table.currentRow()
+        if current_row < 0:
+            return
+        
+        asset_id = self.assets_table.item(current_row, 0).data(Qt.UserRole)
+        if not asset_id:
+            return
+        
+        try:
+            # Get asset from database
+            db_manager = self.database_initializer.get_database_manager()
+            connection = db_manager.get_connection()
+            
+            asset_data = connection.fetchone(
+                "SELECT * FROM assets WHERE id = ?",
+                (asset_id,)
+            )
+            
+            if asset_data:
+                asset_dict = dict(asset_data)
+                asset = Asset(**asset_dict)
+                
+                dialog = AssetEditDialog(asset, parent=self)
+                dialog.asset_saved.connect(self._on_asset_saved)
+                dialog.exec()
+        
+        except Exception as e:
+            logger.error(f"Failed to edit asset: {str(e)}")
+    
+    def _on_asset_saved(self, asset: Asset):
+        """Handle asset saved event."""
+        try:
+            # Save to database
+            db_manager = self.database_initializer.get_database_manager()
+            connection = db_manager.get_connection()
+            asset_repo = EntityFactory.get_repository(connection, Asset)
+            
+            if asset.id is None:
+                # New asset
+                new_id = asset_repo.create(asset)
+                if new_id:
+                    asset.id = new_id
+                    logger.info(f"Created asset: {asset.asset_name}")
+                else:
+                    QMessageBox.critical(self, "Save Failed", "Failed to create asset in database")
+                    return
+            else:
+                # Update existing asset
+                if not asset_repo.update(asset):
+                    QMessageBox.critical(self, "Save Failed", "Failed to update asset in database")
+                    return
+                logger.info(f"Updated asset: {asset.asset_name}")
+            
+            # Refresh the assets table
+            if self.current_system_id:
+                self._load_assets_for_system(self.current_system_id)
+            
+        except Exception as e:
+            logger.error(f"Failed to save asset: {str(e)}")
+            QMessageBox.critical(self, "Save Failed", f"Failed to save asset:\n{str(e)}")
+    
+    def _add_hazard(self):
+        """Add a new hazard."""
+        dialog = HazardEditDialog(parent=self)
+        dialog.hazard_saved.connect(self._on_hazard_saved)
+        dialog.exec()
+    
+    def _edit_hazard(self):
+        """Edit selected hazard."""
+        current_row = self.hazards_table.currentRow()
+        if current_row < 0:
+            return
+        
+        hazard_id = self.hazards_table.item(current_row, 0).data(Qt.UserRole)
+        if not hazard_id:
+            return
+        
+        try:
+            # Get hazard from database
+            db_manager = self.database_initializer.get_database_manager()
+            connection = db_manager.get_connection()
+            
+            hazard_data = connection.fetchone(
+                "SELECT * FROM hazards WHERE id = ?",
+                (hazard_id,)
+            )
+            
+            if hazard_data:
+                hazard_dict = dict(hazard_data)
+                hazard = Hazard(**hazard_dict)
+                
+                dialog = HazardEditDialog(hazard, parent=self)
+                dialog.hazard_saved.connect(self._on_hazard_saved)
+                dialog.exec()
+        
+        except Exception as e:
+            logger.error(f"Failed to edit hazard: {str(e)}")
+    
+    def _on_hazard_saved(self, hazard: Hazard):
+        """Handle hazard saved event."""
+        try:
+            # Save to database
+            db_manager = self.database_initializer.get_database_manager()
+            connection = db_manager.get_connection()
+            hazard_repo = EntityFactory.get_repository(connection, Hazard)
+            
+            if hazard.id is None:
+                # New hazard
+                new_id = hazard_repo.create(hazard)
+                if new_id:
+                    hazard.id = new_id
+                    logger.info(f"Created hazard: {hazard.hazard_name}")
+                else:
+                    QMessageBox.critical(self, "Save Failed", "Failed to create hazard in database")
+                    return
+            else:
+                # Update existing hazard
+                if not hazard_repo.update(hazard):
+                    QMessageBox.critical(self, "Save Failed", "Failed to update hazard in database")
+                    return
+                logger.info(f"Updated hazard: {hazard.hazard_name}")
+            
+            # Refresh the hazards table
+            self._load_hazards_for_system(self.current_system_id if self.current_system_id else 0)
+            
+        except Exception as e:
+            logger.error(f"Failed to save hazard: {str(e)}")
+            QMessageBox.critical(self, "Save Failed", f"Failed to save hazard:\n{str(e)}")
+    
+    def _add_loss(self):
+        """Add a new loss."""
+        dialog = LossEditDialog(parent=self)
+        dialog.loss_saved.connect(self._on_loss_saved)
+        dialog.exec()
+    
+    def _edit_loss(self):
+        """Edit selected loss."""
+        current_row = self.losses_table.currentRow()
+        if current_row < 0:
+            return
+        
+        loss_id = self.losses_table.item(current_row, 0).data(Qt.UserRole)
+        if not loss_id:
+            return
+        
+        try:
+            # Get loss from database
+            db_manager = self.database_initializer.get_database_manager()
+            connection = db_manager.get_connection()
+            
+            loss_data = connection.fetchone(
+                "SELECT * FROM losses WHERE id = ?",
+                (loss_id,)
+            )
+            
+            if loss_data:
+                loss_dict = dict(loss_data)
+                loss = Loss(**loss_dict)
+                
+                dialog = LossEditDialog(loss, parent=self)
+                dialog.loss_saved.connect(self._on_loss_saved)
+                dialog.exec()
+        
+        except Exception as e:
+            logger.error(f"Failed to edit loss: {str(e)}")
+    
+    def _on_loss_saved(self, loss: Loss):
+        """Handle loss saved event."""
+        try:
+            # Save to database
+            db_manager = self.database_initializer.get_database_manager()
+            connection = db_manager.get_connection()
+            loss_repo = EntityFactory.get_repository(connection, Loss)
+            
+            if loss.id is None:
+                # New loss
+                new_id = loss_repo.create(loss)
+                if new_id:
+                    loss.id = new_id
+                    logger.info(f"Created loss: {loss.loss_name}")
+                else:
+                    QMessageBox.critical(self, "Save Failed", "Failed to create loss in database")
+                    return
+            else:
+                # Update existing loss
+                if not loss_repo.update(loss):
+                    QMessageBox.critical(self, "Save Failed", "Failed to update loss in database")
+                    return
+                logger.info(f"Updated loss: {loss.loss_name}")
+            
+            # Refresh the losses table
+            self._load_losses_for_system(self.current_system_id if self.current_system_id else 0)
+            
+        except Exception as e:
+            logger.error(f"Failed to save loss: {str(e)}")
+            QMessageBox.critical(self, "Save Failed", f"Failed to save loss:\n{str(e)}")
+    
+    def _add_control_structure(self):
+        """Add a new control structure to the current system."""
+        if not self.current_system_id:
+            QMessageBox.warning(self, "No System Selected", "Please select a system first.")
+            return
+        
+        dialog = ControlStructureEditDialog(system_id=self.current_system_id, parent=self)
+        dialog.control_structure_saved.connect(self._on_control_structure_saved)
+        dialog.exec()
+    
+    def _edit_control_structure(self):
+        """Edit selected control structure."""
+        current_row = self.control_structures_table.currentRow()
+        if current_row < 0:
+            return
+        
+        control_structure_id = self.control_structures_table.item(current_row, 0).data(Qt.UserRole)
+        if not control_structure_id:
+            return
+        
+        try:
+            # Get control structure from database
+            db_manager = self.database_initializer.get_database_manager()
+            connection = db_manager.get_connection()
+            
+            control_structure_data = connection.fetchone(
+                "SELECT * FROM control_structures WHERE id = ?",
+                (control_structure_id,)
+            )
+            
+            if control_structure_data:
+                cs_dict = dict(control_structure_data)
+                control_structure = ControlStructure(**cs_dict)
+                
+                dialog = ControlStructureEditDialog(control_structure, parent=self)
+                dialog.control_structure_saved.connect(self._on_control_structure_saved)
+                dialog.exec()
+        
+        except Exception as e:
+            logger.error(f"Failed to edit control structure: {str(e)}")
+    
+    def _on_control_structure_saved(self, control_structure: ControlStructure):
+        """Handle control structure saved event."""
+        try:
+            # Save to database
+            db_manager = self.database_initializer.get_database_manager()
+            connection = db_manager.get_connection()
+            control_structure_repo = EntityFactory.get_repository(connection, ControlStructure)
+            
+            if control_structure.id is None:
+                # New control structure
+                new_id = control_structure_repo.create(control_structure)
+                if new_id:
+                    control_structure.id = new_id
+                    logger.info(f"Created control structure: {control_structure.structure_name}")
+                else:
+                    QMessageBox.critical(self, "Save Failed", "Failed to create control structure in database")
+                    return
+            else:
+                # Update existing control structure
+                if not control_structure_repo.update(control_structure):
+                    QMessageBox.critical(self, "Save Failed", "Failed to update control structure in database")
+                    return
+                logger.info(f"Updated control structure: {control_structure.structure_name}")
+            
+            # Refresh the control structures table
+            if self.current_system_id:
+                self._load_control_structures_for_system(self.current_system_id)
+            
+        except Exception as e:
+            logger.error(f"Failed to save control structure: {str(e)}")
+            QMessageBox.critical(self, "Save Failed", f"Failed to save control structure:\n{str(e)}")
+    
+    def _add_controller(self):
+        """Add a new controller to the current system."""
+        if not self.current_system_id:
+            QMessageBox.warning(self, "No System Selected", "Please select a system first.")
+            return
+        
+        dialog = ControllerEditDialog(system_id=self.current_system_id, parent=self)
+        dialog.controller_saved.connect(self._on_controller_saved)
+        dialog.exec()
+    
+    def _edit_controller(self):
+        """Edit selected controller."""
+        current_row = self.controllers_table.currentRow()
+        if current_row < 0:
+            return
+        
+        controller_id = self.controllers_table.item(current_row, 0).data(Qt.UserRole)
+        if not controller_id:
+            return
+        
+        try:
+            # Get controller from database
+            db_manager = self.database_initializer.get_database_manager()
+            connection = db_manager.get_connection()
+            
+            controller_data = connection.fetchone(
+                "SELECT * FROM controllers WHERE id = ?",
+                (controller_id,)
+            )
+            
+            if controller_data:
+                controller_dict = dict(controller_data)
+                controller = Controller(**controller_dict)
+                
+                dialog = ControllerEditDialog(controller, parent=self)
+                dialog.controller_saved.connect(self._on_controller_saved)
+                dialog.exec()
+        
+        except Exception as e:
+            logger.error(f"Failed to edit controller: {str(e)}")
+    
+    def _on_controller_saved(self, controller: Controller):
+        """Handle controller saved event."""
+        try:
+            # Save to database
+            db_manager = self.database_initializer.get_database_manager()
+            connection = db_manager.get_connection()
+            controller_repo = EntityFactory.get_repository(connection, Controller)
+            
+            if controller.id is None:
+                # New controller
+                new_id = controller_repo.create(controller)
+                if new_id:
+                    controller.id = new_id
+                    logger.info(f"Created controller: {controller.controller_name}")
+                else:
+                    QMessageBox.critical(self, "Save Failed", "Failed to create controller in database")
+                    return
+            else:
+                # Update existing controller
+                if not controller_repo.update(controller):
+                    QMessageBox.critical(self, "Save Failed", "Failed to update controller in database")
+                    return
+                logger.info(f"Updated controller: {controller.controller_name}")
+            
+            # Refresh the controllers table
+            if self.current_system_id:
+                self._load_controllers_for_system(self.current_system_id)
+            
+        except Exception as e:
+            logger.error(f"Failed to save controller: {str(e)}")
+            QMessageBox.critical(self, "Save Failed", f"Failed to save controller:\n{str(e)}")
+    
+    def _load_interfaces_for_system(self, system_id: int):
+        """Load interfaces for the selected system."""
+        try:
+            db_manager = self.database_initializer.get_database_manager()
+            connection = db_manager.get_connection()
+            
+            interfaces = connection.fetchall(
+                "SELECT * FROM interfaces WHERE system_id = ? AND baseline = ? ORDER BY system_hierarchy",
+                (system_id, "Working")
+            )
+            
+            # Clear and populate interfaces table
+            self.interfaces_table.setRowCount(len(interfaces))
+            
+            for row, int_data in enumerate(interfaces):
+                int_dict = dict(int_data)
+                interface = Interface(**int_dict)
+                
+                items = [
+                    QTableWidgetItem(interface.get_hierarchical_id()),
+                    QTableWidgetItem(interface.interface_name),
+                    QTableWidgetItem(self._get_system_name(interface.system_id)),
+                    QTableWidgetItem(interface.interface_description[:100] + "..." if len(interface.interface_description or "") > 100 else interface.interface_description or "")
+                ]
+
+                for item in items:
+                    item.setFlags(item.flags() & ~Qt.ItemIsEditable)
+
+                for col, item in enumerate(items):
+                    self.interfaces_table.setItem(row, col, item)
+                
+                # Store interface ID for editing
+                self.interfaces_table.item(row, 0).setData(Qt.UserRole, interface.id)
+            
+        except Exception as e:
+            logger.error(f"Failed to load interfaces: {str(e)}")
+    
+    def _load_assets_for_system(self, system_id: int):
+        """Load assets for the selected system."""
+        try:
+            db_manager = self.database_initializer.get_database_manager()
+            connection = db_manager.get_connection()
+            
+            assets = connection.fetchall(
+                "SELECT * FROM assets WHERE system_id = ? AND baseline = ? ORDER BY system_hierarchy",
+                (system_id, "Working")
+            )
+            
+            # Clear and populate assets table
+            self.assets_table.setRowCount(len(assets))
+            
+            for row, asset_data in enumerate(assets):
+                asset_dict = dict(asset_data)
+                asset = Asset(**asset_dict)
+                
+                items = [
+                    QTableWidgetItem(asset.get_hierarchical_id()),
+                    QTableWidgetItem(asset.asset_name),
+                    QTableWidgetItem(self._get_system_name(asset.system_id)),
+                    QTableWidgetItem(asset.asset_description[:100] + "..." if len(asset.asset_description or "") > 100 else asset.asset_description or "")
+                ]
+
+                for item in items:
+                    item.setFlags(item.flags() & ~Qt.ItemIsEditable)
+
+                for col, item in enumerate(items):
+                    self.assets_table.setItem(row, col, item)
+
+                # Store asset ID for editing
+                self.assets_table.item(row, 0).setData(Qt.UserRole, asset.id)
+            
+        except Exception as e:
+            logger.error(f"Failed to load assets: {str(e)}")
+    
+    def _load_hazards_for_system(self, system_id: int):
+        """Load hazards for the selected system."""
+        try:
+            db_manager = self.database_initializer.get_database_manager()
+            connection = db_manager.get_connection()
+            
+            hazards = connection.fetchall(
+                "SELECT * FROM hazards WHERE baseline = ? ORDER BY system_hierarchy",
+                ("Working",)
+            )
+            
+            # Clear and populate hazards table
+            self.hazards_table.setRowCount(len(hazards))
+            
+            for row, hazard_data in enumerate(hazards):
+                hazard_dict = dict(hazard_data)
+                hazard = Hazard(**hazard_dict)
+                
+                items = [
+                    QTableWidgetItem(hazard.get_hierarchical_id()),
+                    QTableWidgetItem(hazard.hazard_name),
+                    QTableWidgetItem("All Systems"),  # Hazards are system-wide
+                    QTableWidgetItem(hazard.hazard_description[:100] + "..." if len(hazard.hazard_description or "") > 100 else hazard.hazard_description or "")
+                ]
+
+                for item in items:
+                    item.setFlags(item.flags() & ~Qt.ItemIsEditable)
+
+                for col, item in enumerate(items):
+                    self.hazards_table.setItem(row, col, item)
+                
+                # Store hazard ID for editing
+                self.hazards_table.item(row, 0).setData(Qt.UserRole, hazard.id)
+            
+        except Exception as e:
+            logger.error(f"Failed to load hazards: {str(e)}")
+    
+    def _load_losses_for_system(self, system_id: int):
+        """Load losses for the selected system."""
+        try:
+            db_manager = self.database_initializer.get_database_manager()
+            connection = db_manager.get_connection()
+            
+            losses = connection.fetchall(
+                "SELECT * FROM losses WHERE baseline = ? ORDER BY system_hierarchy",
+                ("Working",)
+            )
+            
+            # Clear and populate losses table
+            self.losses_table.setRowCount(len(losses))
+            
+            for row, loss_data in enumerate(losses):
+                loss_dict = dict(loss_data)
+                loss = Loss(**loss_dict)
+                
+                items = [
+                    QTableWidgetItem(loss.get_hierarchical_id()),
+                    QTableWidgetItem(loss.loss_name),
+                    QTableWidgetItem("All Systems"),  # Losses are system-wide
+                    QTableWidgetItem(loss.loss_description[:100] + "..." if len(loss.loss_description or "") > 100 else loss.loss_description or "")
+                ]
+
+                for item in items:
+                    item.setFlags(item.flags() & ~Qt.ItemIsEditable)
+
+                for col, item in enumerate(items):
+                    self.losses_table.setItem(row, col, item)
+                
+                # Store loss ID for editing
+                self.losses_table.item(row, 0).setData(Qt.UserRole, loss.id)
+            
+        except Exception as e:
+            logger.error(f"Failed to load losses: {str(e)}")
+    
+    def _load_control_structures_for_system(self, system_id: int):
+        """Load control structures for the selected system."""
+        try:
+            db_manager = self.database_initializer.get_database_manager()
+            connection = db_manager.get_connection()
+            
+            control_structures = connection.fetchall(
+                "SELECT * FROM control_structures WHERE system_id = ? AND baseline = ? ORDER BY system_hierarchy",
+                (system_id, "Working")
+            )
+            
+            # Clear and populate control structures table
+            self.control_structures_table.setRowCount(len(control_structures))
+            
+            for row, cs_data in enumerate(control_structures):
+                cs_dict = dict(cs_data)
+                control_structure = ControlStructure(**cs_dict)
+                
+                items = [
+                    QTableWidgetItem(control_structure.get_hierarchical_id()),
+                    QTableWidgetItem(control_structure.structure_name),
+                    QTableWidgetItem(self._get_system_name(control_structure.system_id)),
+                    QTableWidgetItem(control_structure.structure_description[:100] + "..." if len(control_structure.structure_description or "") > 100 else control_structure.structure_description or "")
+                ]
+
+                for item in items:
+                    item.setFlags(item.flags() & ~Qt.ItemIsEditable)
+
+                for col, item in enumerate(items):
+                    self.control_structures_table.setItem(row, col, item)
+                
+                # Store control structure ID for editing
+                self.control_structures_table.item(row, 0).setData(Qt.UserRole, control_structure.id)
+            
+        except Exception as e:
+            logger.error(f"Failed to load control structures: {str(e)}")
+    
+    def _load_controllers_for_system(self, system_id: int):
+        """Load controllers for the selected system."""
+        try:
+            db_manager = self.database_initializer.get_database_manager()
+            connection = db_manager.get_connection()
+            
+            controllers = connection.fetchall(
+                "SELECT * FROM controllers WHERE system_id = ? AND baseline = ? ORDER BY system_hierarchy",
+                (system_id, "Working")
+            )
+            
+            # Clear and populate controllers table
+            self.controllers_table.setRowCount(len(controllers))
+            
+            for row, controller_data in enumerate(controllers):
+                controller_dict = dict(controller_data)
+                controller = Controller(**controller_dict)
+                
+                items = [
+                    QTableWidgetItem(controller.get_hierarchical_id()),
+                    QTableWidgetItem(controller.controller_name),
+                    QTableWidgetItem(self._get_system_name(controller.system_id)),
+                    QTableWidgetItem(controller.controller_description[:100] + "..." if len(controller.controller_description or "") > 100 else controller.controller_description or "")
+                ]
+
+                for item in items:
+                    item.setFlags(item.flags() & ~Qt.ItemIsEditable)
+
+                for col, item in enumerate(items):
+                    self.controllers_table.setItem(row, col, item)
+                
+                # Store controller ID for editing
+                self.controllers_table.item(row, 0).setData(Qt.UserRole, controller.id)
+            
+        except Exception as e:
+            logger.error(f"Failed to load controllers: {str(e)}")
+    
     def _add_requirement(self):
         """Add a new requirement to the current system."""
         if not self.current_system_id:
@@ -525,721 +1858,412 @@ class MainWindow(QMainWindow):
         except Exception as e:
             logger.error(f"Failed to edit requirement: {str(e)}")
     
-    def _on_system_saved(self, system: System):
-        """Handle system save event."""
-        try:
-            db_manager = self.database_initializer.get_database_manager()
-            connection = db_manager.get_connection()
-            system_repo = EntityFactory.get_repository(connection, System)
-            
-            if system.id is None:
-                # New system
-                saved_system = system_repo.create(system)
-                if saved_system:
-                    self.hierarchy_tree.add_system(saved_system)
-                    self.hierarchy_tree.select_system(saved_system.id)
-                    logger.info(f"Created new system: {saved_system.system_name}")
-            else:
-                # Update existing system
-                if system_repo.update(system):
-                    self.hierarchy_tree.update_system(system)
-                    if system.id == self.current_system_id:
-                        self._on_system_selected(system.id)
-                    logger.info(f"Updated system: {system.system_name}")
-        
-        except Exception as e:
-            logger.error(f"Failed to save system: {str(e)}")
-            QMessageBox.critical(self, "Save Failed", f"Failed to save system: {str(e)}")
-    
-    def _on_function_saved(self, function: Function):
-        """Handle function save event."""
-        try:
-            db_manager = self.database_initializer.get_database_manager()
-            connection = db_manager.get_connection()
-            function_repo = EntityFactory.get_repository(connection, Function)
-            
-            if function.id is None:
-                # New function
-                saved_function = function_repo.create(function)
-                if saved_function:
-                    self._load_functions_for_system(self.current_system_id)
-                    logger.info(f"Created new function: {saved_function.function_name}")
-            else:
-                # Update existing function
-                if function_repo.update(function):
-                    self._load_functions_for_system(self.current_system_id)
-                    logger.info(f"Updated function: {function.function_name}")
-        
-        except Exception as e:
-            logger.error(f"Failed to save function: {str(e)}")
-            QMessageBox.critical(self, "Save Failed", f"Failed to save function: {str(e)}")
-    
     def _on_requirement_saved(self, requirement: Requirement):
-        """Handle requirement save event."""
+        """Handle requirement saved event."""
         try:
+            # Save to database
             db_manager = self.database_initializer.get_database_manager()
             connection = db_manager.get_connection()
             requirement_repo = EntityFactory.get_repository(connection, Requirement)
             
             if requirement.id is None:
                 # New requirement
-                saved_requirement = requirement_repo.create(requirement)
-                if saved_requirement:
-                    self._load_requirements_for_system(self.current_system_id)
-                    logger.info(f"Created new requirement: {saved_requirement.alphanumeric_identifier}")
+                new_id = requirement_repo.create(requirement)
+                if new_id:
+                    requirement.id = new_id
+                    logger.info(f"Created requirement: {requirement.alphanumeric_identifier}")
+                else:
+                    QMessageBox.critical(self, "Save Failed", "Failed to create requirement in database")
+                    return
             else:
                 # Update existing requirement
-                if requirement_repo.update(requirement):
-                    self._load_requirements_for_system(self.current_system_id)
-                    logger.info(f"Updated requirement: {requirement.alphanumeric_identifier}")
-        
+                if not requirement_repo.update(requirement):
+                    QMessageBox.critical(self, "Save Failed", "Failed to update requirement in database")
+                    return
+                logger.info(f"Updated requirement: {requirement.alphanumeric_identifier}")
+            
+            # Refresh the requirements table
+            if self.current_system_id:
+                self._load_requirements_for_system(self.current_system_id)
+            
         except Exception as e:
             logger.error(f"Failed to save requirement: {str(e)}")
-            QMessageBox.critical(self, "Save Failed", f"Failed to save requirement: {str(e)}")
+            QMessageBox.critical(self, "Save Failed", f"Failed to save requirement:\n{str(e)}")
     
     def _setup_menus(self):
-        """Setup the application menu bar."""
+        """Setup the application menus."""
+        # Create menu bar
         menubar = self.menuBar()
         
         # File menu
-        file_menu = menubar.addMenu("&File")
+        file_menu = menubar.addMenu("File")
         
-        # New action
-        new_action = QAction("&New Project", self)
-        new_action.setShortcut("Ctrl+N")
-        new_action.triggered.connect(self._new_project)
-        file_menu.addAction(new_action)
+        # Export submenu
+        export_menu = file_menu.addMenu("Export")
         
-        # Open action
-        open_action = QAction("&Open Project", self)
-        open_action.setShortcut("Ctrl+O")
-        open_action.triggered.connect(self._open_project)
-        file_menu.addAction(open_action)
+        export_json_action = QAction("Export JSON", self)
+        export_json_action.triggered.connect(self._export_json)
+        export_menu.addAction(export_json_action)
         
-        file_menu.addSeparator()
+        export_markdown_action = QAction("Export Markdown", self)
+        export_markdown_action.triggered.connect(self._export_markdown)
+        export_menu.addAction(export_markdown_action)
         
-        # Export actions
-        export_menu = file_menu.addMenu("&Export")
-        
-        json_export_action = QAction("Export as &JSON", self)
-        json_export_action.triggered.connect(self._export_json)
-        export_menu.addAction(json_export_action)
-        
-        md_export_action = QAction("Export as &Markdown", self)
-        md_export_action.triggered.connect(self._export_markdown)
-        export_menu.addAction(md_export_action)
-        
-        export_menu.addSeparator()
-        
-        archive_export_action = QAction("Export &Working Directory", self)
-        archive_export_action.triggered.connect(self._export_working_directory)
-        export_menu.addAction(archive_export_action)
+        export_archive_action = QAction("Export Archive", self)
+        export_archive_action.triggered.connect(self._export_archive)
+        export_menu.addAction(export_archive_action)
         
         file_menu.addSeparator()
         
-        # Exit action
-        exit_action = QAction("E&xit", self)
-        exit_action.setShortcut("Ctrl+Q")
+        exit_action = QAction("Exit", self)
         exit_action.triggered.connect(self.close)
         file_menu.addAction(exit_action)
         
-        # Edit menu
-        edit_menu = menubar.addMenu("&Edit")
+        # Baseline menu
+        baseline_menu = menubar.addMenu("Baseline")
         
-        # Baseline actions
-        baseline_menu = edit_menu.addMenu("&Baseline")
-        
-        create_baseline_action = QAction("&Create Baseline", self)
+        create_baseline_action = QAction("Create Baseline", self)
         create_baseline_action.triggered.connect(self._create_baseline)
         baseline_menu.addAction(create_baseline_action)
         
-        manage_baselines_action = QAction("&Manage Baselines", self)
+        manage_baselines_action = QAction("Manage Baselines", self)
         manage_baselines_action.triggered.connect(self._manage_baselines)
         baseline_menu.addAction(manage_baselines_action)
         
-        baseline_menu.addSeparator()
-        
-        load_baseline_action = QAction("&Load Baseline", self)
-        load_baseline_action.triggered.connect(self._load_baseline)
-        baseline_menu.addAction(load_baseline_action)
-        
         # Collaboration menu
-        collaboration_menu = menubar.addMenu("&Collaboration")
+        collaboration_menu = menubar.addMenu("Collaboration")
         
-        # Branch actions
-        branch_menu = collaboration_menu.addMenu("&Branches")
-        
-        create_branch_action = QAction("&Create Branch", self)
+        create_branch_action = QAction("Create Branch", self)
         create_branch_action.triggered.connect(self._create_branch)
-        branch_menu.addAction(create_branch_action)
+        collaboration_menu.addAction(create_branch_action)
         
-        manage_branches_action = QAction("&Manage Branches", self)
+        manage_branches_action = QAction("Manage Branches", self)
         manage_branches_action.triggered.connect(self._manage_branches)
-        branch_menu.addAction(manage_branches_action)
-        
-        collaboration_menu.addSeparator()
-        
-        merge_branch_action = QAction("&Merge Branch", self)
-        merge_branch_action.triggered.connect(self._merge_branch)
-        collaboration_menu.addAction(merge_branch_action)
-        
-        # View menu
-        view_menu = menubar.addMenu("&View")
+        collaboration_menu.addAction(manage_branches_action)
         
         # Help menu
-        help_menu = menubar.addMenu("&Help")
+        help_menu = menubar.addMenu("Help")
         
-        about_action = QAction("&About", self)
+        about_action = QAction("About", self)
         about_action.triggered.connect(self._show_about)
         help_menu.addAction(about_action)
     
     def _setup_toolbar(self):
         """Setup the application toolbar."""
-        toolbar = self.addToolBar("Main")
+        # Create toolbar
+        toolbar = self.addToolBar("Main Toolbar")
+        toolbar.setMovable(False)
         
-        # Add common actions to toolbar
-        # TODO: Add actual toolbar actions
-        pass
+        # Add system button
+        add_system_action = QAction("Add System", self)
+        add_system_action.triggered.connect(self._add_root_system)
+        toolbar.addAction(add_system_action)
+        
+        toolbar.addSeparator()
+        
+        # Refresh button
+        refresh_action = QAction("Refresh", self)
+        refresh_action.triggered.connect(self._refresh_all)
+        toolbar.addAction(refresh_action)
     
     def _setup_status_bar(self):
-        """Setup the status bar."""
-        self.status_bar = QStatusBar()
-        self.setStatusBar(self.status_bar)
-        
-        # Database status
-        if self.database_initializer:
-            db_manager = self.database_initializer.get_database_manager()
-            if db_manager.is_healthy():
-                db_status = "Database: Connected"
-                db_info = self.database_initializer.get_database_info()
-                if 'tables' in db_info and 'systems' in db_info['tables']:
-                    systems_count = db_info['tables']['systems']
-                    db_status += f" ({systems_count} systems)"
-            else:
-                db_status = "Database: Error"
-        else:
-            db_status = "Database: Not initialized"
-            
-        self.db_label = QLabel(db_status)
-        self.status_bar.addPermanentWidget(self.db_label)
-        
-        # Baseline status
-        self.baseline_label = QLabel("Baseline: Working")
-        self.status_bar.addPermanentWidget(self.baseline_label)
-        
-        # Default status message
+        """Setup the application status bar."""
+        self.status_bar = self.statusBar()
         self.status_bar.showMessage("Ready")
     
     def _restore_window_state(self):
         """Restore window state from configuration."""
-        if not self.config_manager:
-            return
-        
-        ui_config = self.config_manager.config.ui
-        
-        # Restore window size
-        self.resize(ui_config.window_width, ui_config.window_height)
-        
-        # Restore maximized state
-        if ui_config.window_maximized:
-            self.showMaximized()
-        
-        # Restore splitter sizes
-        if ui_config.splitter_sizes and self.splitter:
-            self.splitter.setSizes(ui_config.splitter_sizes)
-    
-    def save_ui_state(self):
-        """Save current UI state to configuration."""
-        if not self.config_manager:
-            return
-        
-        # Save window size and state
-        self.config_manager.update_ui_state(
-            window_width=self.width(),
-            window_height=self.height(),
-            window_maximized=self.isMaximized(),
-            splitter_sizes=self.splitter.sizes() if self.splitter else None
-        )
-    
-    def closeEvent(self, event):
-        """Handle window close event."""
-        self.save_ui_state()
-        event.accept()
-    
-    # Menu action handlers (placeholders for now)
-    def _new_project(self):
-        """Handle new project action."""
-        logger.info("New project action triggered")
-        # TODO: Implement new project functionality
-    
-    def _open_project(self):
-        """Handle open project action."""
-        logger.info("Open project action triggered")
-        # TODO: Implement open project functionality
+        try:
+            # Restore window geometry
+            geometry = self.config_manager.get("window_geometry")
+            if geometry:
+                self.restoreGeometry(geometry)
+            
+            # Restore window state
+            state = self.config_manager.get("window_state")
+            if state:
+                self.restoreState(state)
+            
+            # Restore splitter sizes
+            splitter_sizes = self.config_manager.get("splitter_sizes")
+            if splitter_sizes and self.splitter:
+                self.splitter.setSizes(splitter_sizes)
+                
+        except Exception as e:
+            logger.warning(f"Failed to restore window state: {str(e)}")
     
     def _export_json(self):
-        """Handle JSON export action."""
-        logger.info("JSON export action triggered")
-        
-        # Check if we have a selected system
+        """Export system data as JSON."""
         if not self.current_system_id:
-            QMessageBox.warning(
-                self, 
-                "No System Selected", 
-                "Please select a system in the hierarchy tree before exporting."
-            )
+            QMessageBox.warning(self, "No System Selected", "Please select a system first.")
             return
         
-        # Check database connection
-        if not self.database_initializer:
-            QMessageBox.warning(self, "No Database", "No database connection available.")
-            return
-        
-        try:
-            db_manager = self.database_initializer.get_database_manager()
-            db_connection = db_manager.get_connection()
-            
-            dialog = JsonExportDialog(self, db_connection, self.current_system_id)
-            dialog.exec()
-            
-        except Exception as e:
-            logger.error(f"Error opening JSON export dialog: {str(e)}")
-            QMessageBox.critical(
-                self,
-                "Export Error",
-                f"Failed to open JSON export dialog:\n\n{str(e)}"
-            )
+        dialog = JsonExportDialog(self.current_system_id, parent=self)
+        dialog.exec()
     
     def _export_markdown(self):
-        """Handle Markdown export action."""
-        logger.info("Markdown export action triggered")
-        
-        # Check if we have a selected system
+        """Export system data as Markdown."""
         if not self.current_system_id:
-            QMessageBox.warning(
-                self, 
-                "No System Selected", 
-                "Please select a system in the hierarchy tree before exporting."
-            )
+            QMessageBox.warning(self, "No System Selected", "Please select a system first.")
             return
         
-        # Check database connection
-        if not self.database_initializer:
-            QMessageBox.warning(self, "No Database", "No database connection available.")
-            return
-        
-        try:
-            db_manager = self.database_initializer.get_database_manager()
-            db_connection = db_manager.get_connection()
-            
-            dialog = MarkdownExportDialog(self, db_connection, self.current_system_id)
-            dialog.exec()
-            
-        except Exception as e:
-            logger.error(f"Error opening Markdown export dialog: {str(e)}")
-            QMessageBox.critical(
-                self,
-                "Export Error",
-                f"Failed to open Markdown export dialog:\n\n{str(e)}"
-            )
+        dialog = MarkdownExportDialog(self.current_system_id, parent=self)
+        dialog.exec()
     
-    def _export_working_directory(self):
-        """Handle working directory export action."""
-        logger.info("Working directory export action triggered")
-        
-        # Get the working directory from config
-        if not self.config_manager:
-            QMessageBox.warning(self, "No Configuration", "No configuration manager available.")
+    def _export_archive(self):
+        """Export system data as archive."""
+        if not self.current_system_id:
+            QMessageBox.warning(self, "No System Selected", "Please select a system first.")
             return
         
-        try:
-            config = self.config_manager.config
-            working_dir = config.working_directory
-            
-            if not working_dir or not os.path.exists(working_dir):
-                QMessageBox.warning(
-                    self,
-                    "No Working Directory",
-                    "No valid working directory configured."
-                )
-                return
-            
-            dialog = ArchiveExportDialog(self, working_dir)
-            dialog.exec()
-            
-        except Exception as e:
-            logger.error(f"Error opening working directory export dialog: {str(e)}")
-            QMessageBox.critical(
-                self,
-                "Export Error",
-                f"Failed to open working directory export dialog:\n\n{str(e)}"
-            )
+        dialog = ArchiveExportDialog(self.current_system_id, parent=self)
+        dialog.exec()
     
     def _create_baseline(self):
-        """Handle create baseline action."""
-        logger.info("Create baseline action triggered")
-        
+        """Create a new baseline."""
         if not self.baseline_manager:
-            QMessageBox.warning(self, "No Baseline Manager", "Baseline management is not available.")
+            QMessageBox.warning(self, "Baseline Manager Not Available", "Baseline management is not available.")
             return
         
-        try:
-            dialog = BaselineCreationDialog(self, self.baseline_manager)
-            dialog.exec()
-            
-        except Exception as e:
-            logger.error(f"Error opening baseline creation dialog: {str(e)}")
-            QMessageBox.critical(
-                self,
-                "Error",
-                f"Failed to open baseline creation dialog:\n\n{str(e)}"
-            )
+        dialog = BaselineCreationDialog(self.baseline_manager, parent=self)
+        dialog.exec()
     
     def _manage_baselines(self):
-        """Handle manage baselines action."""
-        logger.info("Manage baselines action triggered")
-        
+        """Manage existing baselines."""
         if not self.baseline_manager:
-            QMessageBox.warning(self, "No Baseline Manager", "Baseline management is not available.")
+            QMessageBox.warning(self, "Baseline Manager Not Available", "Baseline management is not available.")
             return
         
-        try:
-            dialog = BaselineManagementDialog(self, self.baseline_manager)
-            dialog.exec()
-            
-        except Exception as e:
-            logger.error(f"Error opening baseline management dialog: {str(e)}")
-            QMessageBox.critical(
-                self,
-                "Error",
-                f"Failed to open baseline management dialog:\n\n{str(e)}"
-            )
-    
-    def _load_baseline(self):
-        """Handle load baseline action."""
-        logger.info("Load baseline action triggered")
-        
-        if not self.baseline_manager:
-            QMessageBox.warning(self, "No Baseline Manager", "Baseline management is not available.")
-            return
-        
-        # Open baseline management dialog in load mode
-        self._manage_baselines()
+        dialog = BaselineManagementDialog(self.baseline_manager, parent=self)
+        dialog.exec()
     
     def _create_branch(self):
-        """Handle create branch action."""
-        logger.info("Create branch action triggered")
-        
+        """Create a new branch."""
         if not self.branch_manager:
-            QMessageBox.warning(self, "No Branch Manager", "Branch management is not available.")
+            QMessageBox.warning(self, "Branch Manager Not Available", "Branch management is not available.")
             return
         
-        if not self.database_initializer:
-            QMessageBox.warning(self, "No Database", "No database connection available.")
-            return
-        
-        try:
-            db_manager = self.database_initializer.get_database_manager()
-            db_connection = db_manager.get_connection()
-            
-            dialog = BranchCreationDialog(self, self.branch_manager, db_connection)
-            dialog.exec()
-            
-        except Exception as e:
-            logger.error(f"Error opening branch creation dialog: {str(e)}")
-            QMessageBox.critical(
-                self,
-                "Error",
-                f"Failed to open branch creation dialog:\n\n{str(e)}"
-            )
+        dialog = BranchCreationDialog(self.branch_manager, parent=self)
+        dialog.exec()
     
     def _manage_branches(self):
-        """Handle manage branches action."""
-        logger.info("Manage branches action triggered")
-        
-        if not self.branch_manager or not self.merge_manager:
-            QMessageBox.warning(self, "No Branch Manager", "Branch management is not available.")
+        """Manage existing branches."""
+        if not self.branch_manager:
+            QMessageBox.warning(self, "Branch Manager Not Available", "Branch management is not available.")
             return
         
-        try:
-            dialog = BranchManagementDialog(self, self.branch_manager, self.merge_manager)
-            dialog.exec()
-            
-        except Exception as e:
-            logger.error(f"Error opening branch management dialog: {str(e)}")
-            QMessageBox.critical(
-                self,
-                "Error",
-                f"Failed to open branch management dialog:\n\n{str(e)}"
-            )
-    
-    def _merge_branch(self):
-        """Handle merge branch action."""
-        logger.info("Merge branch action triggered")
-        
-        if not self.merge_manager:
-            QMessageBox.warning(self, "No Merge Manager", "Merge functionality is not available.")
-            return
-        
-        # Open branch management dialog which includes merge functionality
-        self._manage_branches()
+        dialog = BranchManagementDialog(self.branch_manager, parent=self)
+        dialog.exec()
     
     def _show_about(self):
         """Show about dialog."""
-        from PySide6.QtWidgets import QMessageBox
-        from ..config.constants import APP_VERSION, APP_AUTHOR
-        
-        QMessageBox.about(
-            self,
-            f"About {APP_NAME}",
-            f"""
-            <h3>{APP_NAME}</h3>
-            <p>Version: {APP_VERSION}</p>
-            <p>Author: {APP_AUTHOR}</p>
-            <p>A Systems-Theoretic Process Analysis Tool</p>
-            """
-        )
+        QMessageBox.about(self, "About STPA Tool", 
+                         f"{APP_NAME}\n\n"
+                         "A comprehensive tool for System-Theoretic Process Analysis (STPA).\n\n"
+                         "Version: 1.0.0\n"
+                         "Built with Python and PySide6")
     
-    def _setup_interfaces_tab(self):
-        """Setup interfaces management tab."""
-        try:
-            self.interfaces_widget = InterfaceWidget(self.database_initializer)
-            self.content_tabs.addTab(self.interfaces_widget, "Interfaces")
-        except Exception as e:
-            logger.error(f"Failed to setup interfaces tab: {str(e)}")
-            # Add fallback placeholder
-            interfaces_widget = QWidget()
-            interfaces_layout = QVBoxLayout(interfaces_widget)
-            interfaces_layout.addWidget(QLabel("Interfaces - Setup Error"))
-            self.content_tabs.addTab(interfaces_widget, "Interfaces")
+    def _add_root_system(self):
+        """Add a new root system."""
+        dialog = SystemEditDialog(parent=self)
+        dialog.system_saved.connect(self._on_system_saved)
+        dialog.exec()
     
-    def _setup_assets_tab(self):
-        """Setup assets management tab."""
+    def _on_system_saved(self, system: System):
+        """Handle system saved event."""
         try:
-            self.assets_widget = AssetWidget(self.database_initializer)
-            self.content_tabs.addTab(self.assets_widget, "Assets")
-        except Exception as e:
-            logger.error(f"Failed to setup assets tab: {str(e)}")
-            # Add fallback placeholder
-            assets_widget = QWidget()
-            assets_layout = QVBoxLayout(assets_widget)
-            assets_layout.addWidget(QLabel("Assets - Setup Error"))
-            self.content_tabs.addTab(assets_widget, "Assets")
-    
-    def _setup_hazards_tab(self):
-        """Setup hazards management tab."""
-        try:
-            self.hazards_widget = HazardWidget(self.database_initializer)
-            self.content_tabs.addTab(self.hazards_widget, "Hazards")
-        except Exception as e:
-            logger.error(f"Failed to setup hazards tab: {str(e)}")
-            # Add fallback placeholder
-            hazards_widget = QWidget()
-            hazards_layout = QVBoxLayout(hazards_widget)
-            hazards_layout.addWidget(QLabel("Hazards - Setup Error"))
-            self.content_tabs.addTab(hazards_widget, "Hazards")
-    
-    def _setup_losses_tab(self):
-        """Setup losses management tab."""
-        try:
-            self.losses_widget = LossWidget(self.database_initializer)
-            self.content_tabs.addTab(self.losses_widget, "Losses")
-        except Exception as e:
-            logger.error(f"Failed to setup losses tab: {str(e)}")
-            # Add fallback placeholder
-            losses_widget = QWidget()
-            losses_layout = QVBoxLayout(losses_widget)
-            losses_layout.addWidget(QLabel("Losses - Setup Error"))
-            self.content_tabs.addTab(losses_widget, "Losses")
-    
-    def _setup_control_structures_tab(self):
-        """Setup control structures management tab."""
-        try:
-            self.control_structures_widget = ControlStructureWidget(self.database_initializer)
-            self.content_tabs.addTab(self.control_structures_widget, "Control Structures")
-        except Exception as e:
-            logger.error(f"Failed to setup control structures tab: {str(e)}")
-            # Add fallback placeholder
-            control_structures_widget = QWidget()
-            control_structures_layout = QVBoxLayout(control_structures_widget)
-            control_structures_layout.addWidget(QLabel("Control Structures - Setup Error"))
-            self.content_tabs.addTab(control_structures_widget, "Control Structures")
-    
-    def _setup_controllers_tab(self):
-        """Setup controllers management tab."""
-        try:
-            self.controllers_widget = ControllerWidget(self.database_initializer)
-            self.content_tabs.addTab(self.controllers_widget, "Controllers")
-        except Exception as e:
-            logger.error(f"Failed to setup controllers tab: {str(e)}")
-            # Add fallback placeholder
-            controllers_widget = QWidget()
-            controllers_layout = QVBoxLayout(controllers_widget)
-            controllers_layout.addWidget(QLabel("Controllers - Setup Error"))
-            self.content_tabs.addTab(controllers_widget, "Controllers")
-    
-    def _setup_diagram_components(self):
-        """Initialize diagram generation and rendering components."""
-        try:
-            working_directory = self.config_manager.working_directory
-            
-            # Initialize diagram renderer
-            self.diagram_renderer = DiagramRenderer()
-            
-            # Initialize diagram generator with output directory
-            diagram_output_dir = working_directory / 'diagrams'
-            self.diagram_generator = DiagramGenerator(diagram_output_dir)
-            
-            logger.info("Diagram components initialized successfully")
-            
-        except Exception as e:
-            logger.error(f"Failed to initialize diagram components: {str(e)}")
-    
-    def _setup_collaboration_components(self):
-        """Setup baseline and collaboration managers."""
-        try:
-            if not self.database_initializer or not self.config_manager:
-                return
-            
-            # Get database connection and working directory
+            # Save to database
             db_manager = self.database_initializer.get_database_manager()
-            db_connection = db_manager.get_connection()
+            connection = db_manager.get_connection()
+            system_repo = EntityFactory.get_repository(connection, System)
             
-            config = self.config_manager.config
-            working_directory = config.working_directory or ''
+            if system.id is None:
+                # New system
+                new_id = system_repo.create(system)
+                if new_id:
+                    system.id = new_id
+                    logger.info(f"Created system: {system.system_name}")
+                else:
+                    QMessageBox.critical(self, "Save Failed", "Failed to create system in database")
+                    return
+            else:
+                # Update existing system
+                if not system_repo.update(system):
+                    QMessageBox.critical(self, "Save Failed", "Failed to update system in database")
+                    return
+                logger.info(f"Updated system: {system.system_name}")
             
-            if not working_directory:
-                logger.warning("No working directory configured for collaboration components")
-                return
-            
-            # Initialize managers
-            self.baseline_manager = BaselineManager(db_connection, working_directory)
-            self.branch_manager = BranchManager(db_connection, working_directory)
-            self.merge_manager = MergeManager(db_connection, working_directory)
-            
-            # Ensure baseline metadata table exists
-            self.baseline_manager.ensure_baseline_metadata_table()
-            
-            logger.info("Collaboration components initialized successfully")
-            
-        except Exception as e:
-            logger.error(f"Failed to setup collaboration components: {str(e)}")
-    
-    def _setup_diagrams_tab(self):
-        """Setup diagrams management tab."""
-        try:
-            # Create diagram tab widget
-            diagrams_widget = QWidget()
-            diagrams_layout = QVBoxLayout(diagrams_widget)
-            
-            # Create diagram controls
-            controls_layout = QHBoxLayout()
-            
-            # Diagram type selector
-            self.diagram_type_combo = QComboBox()
-            self.diagram_type_combo.addItem("Control Structure", DiagramType.CONTROL_STRUCTURE)
-            self.diagram_type_combo.addItem("State Diagram", DiagramType.STATE_DIAGRAM)
-            self.diagram_type_combo.addItem("Requirement Hierarchy", DiagramType.REQUIREMENT_HIERARCHY)
-            self.diagram_type_combo.addItem("System Hierarchy", DiagramType.SYSTEM_HIERARCHY)
-            
-            # Generate button
-            generate_btn = QPushButton("Generate Diagram")
-            generate_btn.clicked.connect(self._generate_diagram)
-            
-            # Refresh button
-            refresh_btn = QPushButton("Refresh")
-            refresh_btn.clicked.connect(self._refresh_diagrams)
-            
-            controls_layout.addWidget(QLabel("Type:"))
-            controls_layout.addWidget(self.diagram_type_combo)
-            controls_layout.addWidget(generate_btn)
-            controls_layout.addWidget(refresh_btn)
-            controls_layout.addStretch()
-            
-            diagrams_layout.addLayout(controls_layout)
-            
-            # Create diagram viewer
-            self.diagram_viewer = DiagramViewer()
-            diagrams_layout.addWidget(self.diagram_viewer)
-            
-            self.content_tabs.addTab(diagrams_widget, "Diagrams")
+            # Refresh the hierarchy tree
+            if self.hierarchy_tree:
+                self.hierarchy_tree.refresh_from_database()
             
         except Exception as e:
-            logger.error(f"Failed to setup diagrams tab: {str(e)}")
-            # Add fallback placeholder
-            diagrams_widget = QWidget()
-            diagrams_layout = QVBoxLayout(diagrams_widget)
-            diagrams_layout.addWidget(QLabel("Diagrams - Setup Error"))
-            self.content_tabs.addTab(diagrams_widget, "Diagrams")
+            logger.error(f"Failed to save system: {str(e)}")
+            QMessageBox.critical(self, "Save Failed", f"Failed to save system:\n{str(e)}")
     
-    def _generate_diagram(self):
-        """Generate diagram for current system."""
-        if not self.current_system_id:
-            QMessageBox.warning(self, "No System Selected", "Please select a system to generate a diagram.")
-            return
-        
-        if not self.diagram_generator or not self.diagram_renderer:
-            QMessageBox.critical(self, "Diagram Error", "Diagram components not properly initialized.")
-            return
-        
+    def _refresh_all(self):
+        """Refresh all data."""
         try:
-            # Get selected diagram type
-            diagram_type = self.diagram_type_combo.currentData()
+            # Refresh hierarchy tree
+            if self.hierarchy_tree:
+                self.hierarchy_tree.refresh_from_database()
             
-            # Generate diagram based on type
-            mermaid_source = ""
-            diagram_name = f"system_{self.current_system_id}_{diagram_type.value}"
+            # Refresh current system data if selected
+            if self.current_system_id:
+                self._on_system_selected(self.current_system_id)
             
-            if diagram_type == DiagramType.CONTROL_STRUCTURE:
-                mermaid_source = self.diagram_generator.generate_control_structure_diagram(
-                    self.current_system_id
-                )
-            elif diagram_type == DiagramType.STATE_DIAGRAM:
-                mermaid_source = self.diagram_generator.generate_state_diagram(
-                    self.current_system_id
-                )
-            elif diagram_type == DiagramType.REQUIREMENT_HIERARCHY:
-                mermaid_source = self.diagram_generator.generate_requirement_hierarchy_diagram(
-                    self.current_system_id
-                )
-            elif diagram_type == DiagramType.SYSTEM_HIERARCHY:
-                mermaid_source = self.diagram_generator.generate_system_hierarchy_diagram(
-                    self.current_system_id
-                )
+            self.status_bar.showMessage("Data refreshed", 3000)
             
-            if not mermaid_source:
-                QMessageBox.warning(self, "Generation Error", "Failed to generate diagram source.")
-                return
+        except Exception as e:
+            logger.error(f"Failed to refresh data: {str(e)}")
+            self.status_bar.showMessage("Failed to refresh data", 3000)
+    
+    def _show_error(self, title: str, message: str):
+        """Show error message dialog."""
+        QMessageBox.critical(self, title, message)
+    
+    def _get_system_name(self, system_id: int) -> str:
+        """Get system name by ID."""
+        try:
+            if not self.database_initializer:
+                return "Unknown"
             
-            # Render diagram
-            output_files = self.diagram_renderer.render_diagram(
-                mermaid_source,
-                diagram_name,
-                diagram_type,
-                output_formats=['svg', 'png']
+            db_manager = self.database_initializer.get_database_manager()
+            connection = db_manager.get_connection()
+            
+            system_data = connection.fetchone(
+                "SELECT system_name FROM systems WHERE id = ?",
+                (system_id,)
             )
             
-            # Load SVG in viewer
-            if 'svg' in output_files:
-                self.diagram_viewer.load_diagram(output_files['svg'])
-                QMessageBox.information(
-                    self, 
-                    "Diagram Generated", 
-                    f"Diagram generated successfully!\nSVG: {output_files['svg']}"
-                )
+            if system_data:
+                return system_data['system_name']
             else:
-                QMessageBox.warning(self, "Render Error", "Failed to render diagram to SVG.")
+                return "Unknown"
                 
         except Exception as e:
-            logger.error(f"Error generating diagram: {str(e)}")
-            QMessageBox.critical(
-                self, 
-                "Diagram Generation Error", 
-                f"Failed to generate diagram:\n{str(e)}"
-            )
+            logger.error(f"Failed to get system name: {str(e)}")
+            return "Unknown"
     
-    def _refresh_diagrams(self):
-        """Refresh diagram display."""
-        if self.diagram_viewer:
-            # Could implement gallery refresh here
-            logger.info("Diagram refresh requested")
+    def _on_system_selected(self, system_id: int):
+        """Handle system selection from hierarchy tree."""
+        try:
+            self.current_system_id = system_id
+            
+            # Update breadcrumb
+            if self.database_initializer:
+                db_manager = self.database_initializer.get_database_manager()
+                connection = db_manager.get_connection()
+                system_repo = EntityFactory.get_repository(connection, System)
+                system = system_repo.get_by_id(system_id)
+                
+                if system:
+                    self._update_breadcrumb(system)
+                    self._enable_system_buttons()
+                    
+                    # Load data for all tabs
+                    self._load_functions_for_system(system_id)
+                    self._load_requirements_for_system(system_id)
+                    self._load_interfaces_for_system(system_id)
+                    self._load_assets_for_system(system_id)
+                    self._load_hazards_for_system(system_id)
+                    self._load_losses_for_system(system_id)
+                    self._load_control_structures_for_system(system_id)
+                    self._load_controllers_for_system(system_id)
+                    
+        except Exception as e:
+            logger.error(f"Failed to handle system selection: {str(e)}")
+    
+    def _on_system_changed(self):
+        """Handle system change notification."""
+        if self.hierarchy_tree:
+            self.hierarchy_tree.refresh_from_database()
+    
+    def _update_breadcrumb(self, system: System):
+        """Update the breadcrumb with system information."""
+        if system:
+            breadcrumb_text = f"System: {system.system_name}"
+            if system.system_description:
+                breadcrumb_text += f" - {system.system_description[:50]}..."
+            self.breadcrumb_label.setText(breadcrumb_text)
+        else:
+            self.breadcrumb_label.setText("No system selected")
+    
+    def _enable_system_buttons(self):
+        """Enable system-related buttons when a system is selected."""
+        self.edit_system_btn.setEnabled(True)
+        self.add_child_system_btn.setEnabled(True)
+        
+        # Enable add buttons for all entity types
+        self.add_function_btn.setEnabled(True)
+        self.add_requirement_btn.setEnabled(True)
+        self.add_interface_btn.setEnabled(True)
+        self.add_asset_btn.setEnabled(True)
+        self.add_control_structure_btn.setEnabled(True)
+        self.add_controller_btn.setEnabled(True)
+    
+    def _add_child_system(self):
+        """Add a child system to the currently selected system."""
+        if not self.current_system_id:
+            QMessageBox.warning(self, "No System Selected", "Please select a parent system first.")
+            return
+        
+        dialog = SystemEditDialog(parent_id=self.current_system_id, parent=self)
+        dialog.system_saved.connect(self._on_system_saved)
+        dialog.exec()
+    
+    def _load_functions_for_system(self, system_id: int):
+        """Load functions for the selected system."""
+        try:
+            db_manager = self.database_initializer.get_database_manager()
+            connection = db_manager.get_connection()
+            
+            functions = connection.fetchall(
+                "SELECT * FROM functions WHERE system_id = ? AND baseline = ? ORDER BY system_hierarchy",
+                (system_id, "Working")
+            )
+            
+            # Clear and populate functions table
+            self.functions_table.setRowCount(len(functions))
+            
+            for row, func_data in enumerate(functions):
+                func_dict = dict(func_data)
+                function = Function(**func_dict)
+                
+                items = [
+                    QTableWidgetItem(function.get_hierarchical_id()),
+                    QTableWidgetItem(function.function_name),
+                    QTableWidgetItem(function.function_description[:100] + "..." if len(function.function_description or "") > 100 else function.function_description or ""),
+                    QTableWidgetItem(function.criticality or "Medium")
+                ]
+
+                for item in items:
+                    item.setFlags(item.flags() & ~Qt.ItemIsEditable)
+
+                for col, item in enumerate(items):
+                    self.functions_table.setItem(row, col, item)
+                
+                # Store function ID for editing
+                self.functions_table.item(row, 0).setData(Qt.UserRole, function.id)
+            
+        except Exception as e:
+            logger.error(f"Failed to load functions: {str(e)}")
+    
+    def closeEvent(self, event):
+        """Handle window close event."""
+        try:
+            # Save window state
+            self.config_manager.set("window_geometry", self.saveGeometry())
+            self.config_manager.set("window_state", self.saveState())
+            
+            if self.splitter:
+                self.config_manager.set("splitter_sizes", self.splitter.sizes())
+            
+            # Save configuration
+            self.config_manager.save()
+            
+            event.accept()
+            
+        except Exception as e:
+            logger.error(f"Failed to save window state: {str(e)}")
+            event.accept()
